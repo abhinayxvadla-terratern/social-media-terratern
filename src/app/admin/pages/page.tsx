@@ -33,6 +33,7 @@ import {
   FileCheck,
   Share2,
   Code2,
+  Link2,
 } from "lucide-react";
 import { getCachedData, setCachedData } from "@/lib/client-cache";
 
@@ -62,7 +63,7 @@ export default function PagesManagementPage() {
 
   // Lead Capture / Integration Snippets Modal
   const [integrationModalPage, setIntegrationModalPage] = useState<Page | null>(null);
-  const [integrationTab, setIntegrationTab] = useState<"script" | "webhook" | "curl">("script");
+  const [integrationTab, setIntegrationTab] = useState<"live" | "script" | "webhook" | "curl">("live");
 
   // Social DM Link Modal
   const [socialModalPage, setSocialModalPage] = useState<Page | null>(null);
@@ -613,6 +614,19 @@ export default function PagesManagementPage() {
                   <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
                     <div className="flex items-center gap-1">
                       <button
+                        type="button"
+                        onClick={() => {
+                          setIntegrationModalPage(page);
+                          setIntegrationTab("live");
+                        }}
+                        className="touch-target px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-[#00215C] border border-blue-200 rounded-lg text-xs font-bold flex items-center gap-1 transition"
+                        title="Get Live Page Link, ManyChat URL & Embed Code"
+                      >
+                        <Link2 className="w-3.5 h-3.5 text-[#255CC1]" />
+                        <span>Links</span>
+                      </button>
+
+                      <button
                         onClick={() => handleCopy(page.page_key, `key-${page.id}`)}
                         className="touch-target px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium flex items-center gap-1"
                       >
@@ -829,6 +843,19 @@ export default function PagesManagementPage() {
                         {/* Action Buttons */}
                         <td className="py-3.5 px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIntegrationModalPage(page);
+                                setIntegrationTab("live");
+                              }}
+                              className="px-2.5 py-1 text-xs font-bold text-[#00215C] bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg flex items-center gap-1 transition"
+                              title="Get Live Page Link, ManyChat URL & Embed Code"
+                            >
+                              <Link2 className="w-3.5 h-3.5 text-[#255CC1]" />
+                              <span>Get Links</span>
+                            </button>
+
                             <button
                               onClick={() => handleCopy(page.page_key, `key-${page.id}`)}
                               className="px-2 py-1 text-xs font-mono font-medium text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded transition-colors flex items-center gap-1"
@@ -1337,6 +1364,17 @@ export default function PagesManagementPage() {
                 <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200">
                   <button
                     type="button"
+                    onClick={() => setIntegrationTab("live")}
+                    className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition ${
+                      integrationTab === "live"
+                        ? "bg-white text-[#00215C] shadow-2xs"
+                        : "text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    Live & Social Links
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setIntegrationTab("script")}
                     className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition ${
                       integrationTab === "script"
@@ -1344,7 +1382,7 @@ export default function PagesManagementPage() {
                         : "text-slate-500 hover:text-slate-800"
                     }`}
                   >
-                    1-Line Embed Script (Webflow / WP)
+                    1-Line Embed Script
                   </button>
                   <button
                     type="button"
@@ -1369,6 +1407,76 @@ export default function PagesManagementPage() {
                     REST API (cURL)
                   </button>
                 </div>
+
+                {/* Tab 0: Live & Social Links */}
+                {integrationTab === "live" && (
+                  <div className="space-y-4">
+                    {/* Live Public URL */}
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
+                          Live Public Page URL
+                        </span>
+                        <span className="text-[9px] font-bold uppercase bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded">
+                          Production Live
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          readOnly
+                          value={`${origin}/p/${integrationModalPage.slug}`}
+                          className="w-full bg-white px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono text-slate-800 select-all"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(`${origin}/p/${integrationModalPage.slug}`, "live-url")}
+                          className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 transition flex-shrink-0"
+                        >
+                          {copiedId === "live-url" ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                          <span>{copiedId === "live-url" ? "Copied" : "Copy"}</span>
+                        </button>
+                        <a
+                          href={`${origin}/p/${integrationModalPage.slug}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="p-2 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg transition flex-shrink-0"
+                          title="Open live assessment in new tab"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                        </a>
+                      </div>
+                    </div>
+
+                    {/* Social DM Link Builder */}
+                    <div className="p-3.5 bg-blue-50/70 border border-blue-200 rounded-xl space-y-2.5">
+                      <div className="flex items-center justify-between text-[#00215C]">
+                        <span className="text-xs font-bold uppercase tracking-wider">
+                          Social DM / ManyChat Campaign Link
+                        </span>
+                        <span className="text-[10px] font-bold text-blue-700 bg-white px-2 py-0.5 rounded-full border border-blue-200">
+                          Attribution Tracked
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          readOnly
+                          value={`${origin}/p/${integrationModalPage.slug}?src=ig_dm&kw=${encodeURIComponent(socialKeyword || integrationModalPage.keyword || 'GENERAL')}&post_id=reel_101`}
+                          className="w-full bg-white px-3 py-2 border border-blue-200 rounded-lg text-xs font-mono text-blue-900 select-all"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(`${origin}/p/${integrationModalPage.slug}?src=ig_dm&kw=${encodeURIComponent(socialKeyword || integrationModalPage.keyword || 'GENERAL')}&post_id=reel_101`, "social-tracked-url")}
+                          className="px-3 py-2 bg-[#00215C] hover:bg-[#255CC1] text-white text-xs font-bold rounded-lg flex items-center gap-1.5 transition flex-shrink-0"
+                        >
+                          {copiedId === "social-tracked-url" ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                          <span>{copiedId === "social-tracked-url" ? "Copied" : "Copy"}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Tab 1: Script Embed */}
                 {integrationTab === "script" && (

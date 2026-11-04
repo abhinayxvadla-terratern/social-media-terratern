@@ -45,6 +45,9 @@ import {
   Terminal,
   Columns,
   Layers,
+  Link2,
+  Code2,
+  Globe,
 } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 
@@ -136,12 +139,21 @@ export default function VibeStudioPage() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [existingSlugs, setExistingSlugs] = useState<string[]>([]);
 
-  // Publishing & Saving State
+  // Publishing, Saving & Connected Links State
+  const [currentPageId, setCurrentPageId] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [savingDraft, setSavingDraft] = useState(false);
+  const [isLinksModalOpen, setIsLinksModalOpen] = useState(false);
+  const [linksModalTab, setLinksModalTab] = useState<'live' | 'embed' | 'api'>('live');
   const [publishedPage, setPublishedPage] = useState<{
+    id?: string;
     slug: string;
     page_key: string;
+    name?: string;
+    live_url?: string;
+    embed_script?: string;
+    social_tracked_url?: string;
+    status?: string;
   } | null>(null);
 
   // Social Link Builder inside Publish Modal
@@ -150,6 +162,9 @@ export default function VibeStudioPage() {
   const [campaignPostId, setCampaignPostId] = useState('reel_101');
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedSocialLink, setCopiedSocialLink] = useState(false);
+  const [copiedEmbedScript, setCopiedEmbedScript] = useState(false);
+  const [copiedKey, setCopiedKey] = useState(false);
+  const [previewCopied, setPreviewCopied] = useState(false);
 
   // Sync JSON editor when config updates
   useEffect(() => {
@@ -408,7 +423,7 @@ export default function VibeStudioPage() {
     }
   };
 
-  // Save as Draft (stored immediately in Supabase pages table with status = 'draft')
+  // Save as Draft (stored immediately via /api/v1/admin/pages/publish with status = 'draft')
   const handleSaveDraft = async () => {
     if (!canEdit) {
       alert('Viewer accounts have read-only permissions.');
@@ -417,32 +432,38 @@ export default function VibeStudioPage() {
 
     setSavingDraft(true);
     try {
-      const slug = generateUniqueSlug(customSlug || config.name, existingSlugs);
-      const pageKey = generatePageKey();
-      const origin = typeof window !== 'undefined' ? window.location.origin : 'https://terratern.com';
-
-      const { data, error } = await supabase
-        .from('pages')
-        .insert({
-          name: config.name,
-          slug,
-          page_key: pageKey,
-          page_type: config.page_type,
+      const res = await fetch('/api/v1/admin/pages/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: currentPageId,
+          config,
+          customSlug,
+          customKeyword,
+          pdfAssetId,
           status: 'draft',
-          keyword: customKeyword || config.keyword_suggestion || null,
-          pdf_asset_id: pdfAssetId || null,
-          allowed_origins: [origin],
-          closed_message: 'This assessment is currently in draft mode.',
-          closed_redirect_url: 'https://terratern.com',
-          config: config,
-        })
-        .select()
-        .single();
+        }),
+      });
 
-      if (error) throw error;
+      const result = await res.json();
+      if (!res.ok || !result.success) {
+        throw new Error(result.error || 'Failed to save draft');
+      }
 
-      setExistingSlugs((prev) => [...prev, data.slug]);
-      alert(`Draft saved! Page "${data.name}" is now stored in Pages management with status Draft.`);
+      const pData = {
+        id: result.page.id,
+        slug: result.page.slug,
+        page_key: result.page.page_key,
+        name: result.page.name,
+        live_url: result.live_url,
+        embed_script: result.embed_script,
+        social_tracked_url: result.social_tracked_url,
+        status: 'draft',
+      };
+      setCurrentPageId(result.page.id);
+      setPublishedPage(pData);
+      setExistingSlugs((prev) => [...prev.filter((s) => s !== result.page.slug), result.page.slug]);
+      alert(`Draft saved! Page "${result.page.name}" is now stored in Pages management.`);
     } catch (err: any) {
       console.error('Save draft error:', err);
       alert('Error saving draft: ' + (err.message || 'Database error'));
@@ -451,7 +472,7 @@ export default function VibeStudioPage() {
     }
   };
 
-  // Publish Page Live (stored in Supabase pages table with status = 'live')
+  // Publish Page Live (stored immediately via /api/v1/admin/pages/publish with status = 'live')
   const handlePublish = async () => {
     if (!canEdit) {
       alert('Viewer accounts have read-only permissions.');
@@ -460,50 +481,63 @@ export default function VibeStudioPage() {
 
     setPublishing(true);
     try {
-      const slug = generateUniqueSlug(customSlug || config.name, existingSlugs);
-      const pageKey = generatePageKey();
-      const origin = typeof window !== 'undefined' ? window.location.origin : 'https://terratern.com';
-
-      const { data, error } = await supabase
-        .from('pages')
-        .insert({
-          name: config.name,
-          slug,
-          page_key: pageKey,
-          page_type: config.page_type,
+      const res = await fetch('/api/v1/admin/pages/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: currentPageId,
+          config,
+          customSlug,
+          customKeyword,
+          pdfAssetId,
           status: 'live',
-          keyword: customKeyword || config.keyword_suggestion || null,
-          pdf_asset_id: pdfAssetId || null,
-          allowed_origins: [origin],
-          closed_message: 'This assessment is temporarily paused for updates. Please contact our team.',
-          closed_redirect_url: 'https://terratern.com',
-          config: config,
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      setPublishedPage({
-        slug: data.slug,
-        page_key: data.page_key,
+        }),
       });
-      setExistingSlugs((prev) => [...prev, data.slug]);
+
+      const result = await res.json();
+      if (!res.ok || !result.success) {
+        throw new Error(result.error || 'Failed to publish page');
+      }
+
+      const pData = {
+        id: result.page.id,
+        slug: result.page.slug,
+        page_key: result.page.page_key,
+        name: result.page.name,
+        live_url: result.live_url,
+        embed_script: result.embed_script,
+        social_tracked_url: result.social_tracked_url,
+        status: 'live',
+      };
+      setCurrentPageId(result.page.id);
+      setPublishedPage(pData);
+      setExistingSlugs((prev) => [...prev.filter((s) => s !== result.page.slug), result.page.slug]);
+      setIsLinksModalOpen(true);
     } catch (err: any) {
       console.error('Publish error:', err);
-      alert('Network error while publishing: ' + (err.message || 'Database error'));
+      alert('Error publishing page: ' + (err.message || 'Database error'));
     } finally {
       setPublishing(false);
     }
   };
 
-  const originUrl = typeof window !== 'undefined' ? window.location.origin : '';
-  const baseLiveUrl = publishedPage ? `${originUrl}/p/${publishedPage.slug}` : '';
-  const socialTrackedUrl = publishedPage
-    ? `${baseLiveUrl}?src=${socialPlatform}&kw=${encodeURIComponent(
-        campaignKeyword || customKeyword || 'GENERAL'
-      )}&post_id=${encodeURIComponent(campaignPostId || 'post_1')}`
-    : '';
+  // Quick Open Connected Page Links Modal
+  const handleOpenLinksModal = async () => {
+    if (publishedPage) {
+      setIsLinksModalOpen(true);
+      return;
+    }
+    await handlePublish();
+  };
+
+  const originUrl = typeof window !== 'undefined' ? window.location.origin : 'https://terratern.com';
+  const effectiveSlug = publishedPage?.slug || customSlug || config.slug_suggestion || 'assessment-demo';
+  const effectiveKey = publishedPage?.page_key || 'PAGE_KEY_LIVE';
+  const baseLiveUrl = publishedPage?.live_url || `${originUrl}/p/${effectiveSlug}`;
+  const socialTrackedUrl = `${baseLiveUrl}?src=${socialPlatform}&kw=${encodeURIComponent(
+    campaignKeyword || customKeyword || config.keyword_suggestion || 'GENERAL'
+  )}&post_id=${encodeURIComponent(campaignPostId || 'reel_101')}`;
+  const embedScript = publishedPage?.embed_script || `<script src="${originUrl}/connect.js" data-page-key="${effectiveKey}" async></script>`;
 
   return (
     <div className="flex flex-col h-screen w-full bg-slate-100 overflow-hidden font-sans">
@@ -695,6 +729,18 @@ export default function VibeStudioPage() {
             title="Restart simulation from question 1"
           >
             <RotateCcw className="w-4 h-4" />
+          </button>
+
+          {/* Get Page Links Button */}
+          <button
+            type="button"
+            onClick={handleOpenLinksModal}
+            disabled={publishing}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-[#00215C] font-bold text-xs rounded-xl transition shadow-2xs active:scale-95"
+            title="Get Live Page Link, ManyChat URL & Embed Code"
+          >
+            <Link2 className="w-3.5 h-3.5 text-[#255CC1]" />
+            <span className="hidden sm:inline">Get Links</span>
           </button>
 
           {/* Save Draft Button */}
@@ -1195,16 +1241,47 @@ export default function VibeStudioPage() {
         {/* RIGHT COLUMN: Interactive Live Simulation Preview Canvas */}
         <div className="flex-1 h-full bg-slate-200/75 p-3 sm:p-5 flex flex-col items-center justify-center overflow-hidden min-w-0 relative">
           {/* Simulated Browser URL bar */}
-          <div className="w-full max-w-xl mb-3 flex items-center justify-between gap-2 bg-white/80 backdrop-blur-md px-3 py-1.5 rounded-xl border border-slate-200 shadow-2xs text-xs text-slate-500">
+          <div className="w-full max-w-xl mb-3 flex items-center justify-between gap-2 bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-slate-200 shadow-2xs text-xs text-slate-500">
             <div className="flex items-center gap-1.5 flex-1 min-w-0">
-              <span className="w-2 h-2 rounded-full bg-emerald-500" />
-              <span className="font-mono text-[11px] truncate text-slate-700">
-                https://terratern.com/p/{customSlug || 'assessment-demo'}
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse flex-shrink-0" />
+              <span className="font-mono text-[11px] truncate text-slate-700 select-all font-semibold">
+                {baseLiveUrl}
               </span>
             </div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 hidden sm:inline">
-              Live Preview
-            </span>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(baseLiveUrl);
+                  setPreviewCopied(true);
+                  setTimeout(() => setPreviewCopied(false), 2000);
+                }}
+                className="px-2 py-0.5 rounded text-[11px] font-semibold text-slate-600 hover:text-[#00215C] hover:bg-slate-100 flex items-center gap-1 transition"
+                title="Copy Live Page URL"
+              >
+                {previewCopied ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                <span>{previewCopied ? 'Copied' : 'Copy'}</span>
+              </button>
+              <a
+                href={baseLiveUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="p-1 rounded text-slate-400 hover:text-blue-600 hover:bg-slate-100 transition"
+                title="Open live assessment in new tab"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+              <span className="h-3 w-px bg-slate-200" />
+              <button
+                type="button"
+                onClick={handleOpenLinksModal}
+                className="px-2 py-0.5 rounded text-[11px] font-bold text-[#00215C] bg-blue-50 hover:bg-blue-100 border border-blue-200 flex items-center gap-1 transition"
+                title="Get Connected Embed Code & ManyChat Link"
+              >
+                <Link2 className="w-3 h-3 text-[#255CC1]" />
+                <span>Get Links</span>
+              </button>
+            </div>
           </div>
 
           {/* Interactive Simulation Frame */}
@@ -1312,136 +1389,290 @@ export default function VibeStudioPage() {
         </Modal>
       )}
 
-      {/* 4. Publish Success & Social Share Modal */}
-      {publishedPage && (
+      {/* 4. Publish Success & Connected Page Links Modal */}
+      {(isLinksModalOpen || publishedPage) && (
         <Modal
           isOpen={true}
-          onClose={() => setPublishedPage(null)}
-          title="🎉 Assessment Page Published Live!"
-          description="Your high-converting quiz is live in production and ready to capture leads."
-          maxWidth="lg"
+          onClose={() => {
+            setIsLinksModalOpen(false);
+          }}
+          title={publishedPage?.status === 'draft' ? "📝 Page Saved as Draft" : "🎉 Connected Page Links & Integrations"}
+          description="Access your live URL, social media tracking links, and external website embed scripts."
+          maxWidth="2xl"
         >
-          <div className="space-y-5">
-            {/* Live Link Box */}
-            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-500 block">
-                Live Public URL
+          <div className="space-y-4">
+            {/* Modal Tabs */}
+            <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200">
+              <button
+                type="button"
+                onClick={() => setLinksModalTab('live')}
+                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 ${
+                  linksModalTab === 'live'
+                    ? 'bg-white text-[#00215C] shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Globe className="w-3.5 h-3.5 text-blue-600" />
+                <span>Live & Social Links</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setLinksModalTab('embed')}
+                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 ${
+                  linksModalTab === 'embed'
+                    ? 'bg-white text-[#00215C] shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Code2 className="w-3.5 h-3.5 text-indigo-600" />
+                <span>External Website Embed</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setLinksModalTab('api')}
+                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 ${
+                  linksModalTab === 'api'
+                    ? 'bg-white text-[#00215C] shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Terminal className="w-3.5 h-3.5 text-amber-600" />
+                <span>ManyChat / Webhook API</span>
+              </button>
+            </div>
+
+            {/* TAB 1: Live Assessment & Social DM */}
+            {linksModalTab === 'live' && (
+              <div className="space-y-4 animate-in fade-in duration-150">
+                {/* Direct Live URL */}
+                <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                      Live Assessment URL
+                    </span>
+                    <span className="text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded">
+                      Production Live
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={baseLiveUrl}
+                      className="w-full bg-white px-3 py-2 border border-slate-200 rounded-xl text-xs font-mono text-slate-800 select-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(baseLiveUrl);
+                        setCopiedLink(true);
+                        setTimeout(() => setCopiedLink(false), 2000);
+                      }}
+                      className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition flex-shrink-0"
+                    >
+                      {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{copiedLink ? 'Copied' : 'Copy'}</span>
+                    </button>
+                    <a
+                      href={baseLiveUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="p-2 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl transition flex-shrink-0"
+                      title="Open live page in new window"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                    </a>
+                  </div>
+                </div>
+
+                {/* Social DM & ManyChat Link Builder */}
+                <div className="p-4 bg-blue-50/60 border border-blue-200/80 rounded-2xl space-y-3">
+                  <div className="flex items-center justify-between text-[#00215C]">
+                    <div className="flex items-center gap-2">
+                      <Share2 className="w-4 h-4 text-[#255CC1]" />
+                      <h4 className="font-bold text-xs uppercase tracking-wider">
+                        Social DM / ManyChat Campaign Link
+                      </h4>
+                    </div>
+                    <span className="text-[10px] font-bold text-blue-700 bg-white px-2 py-0.5 rounded-full border border-blue-200">
+                      Attribution Tracked
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-600">
+                    Use this custom URL in your Instagram DMs, ManyChat automation, or bio link to track leads and dropoffs by keyword.
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                        Traffic Source
+                      </label>
+                      <select
+                        value={socialPlatform}
+                        onChange={(e) => setSocialPlatform(e.target.value)}
+                        className="w-full p-2 bg-white border border-slate-200 rounded-lg font-semibold"
+                      >
+                        <option value="ig_dm">Instagram DM (Auto-reply)</option>
+                        <option value="ig_bio">Instagram Bio Link</option>
+                        <option value="wa_chat">WhatsApp Direct</option>
+                        <option value="fb_ad">Facebook / IG Ad</option>
+                        <option value="yt_bio">YouTube / Video Bio</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                        Campaign Keyword
+                      </label>
+                      <input
+                        type="text"
+                        value={campaignKeyword}
+                        onChange={(e) => setCampaignKeyword(e.target.value)}
+                        placeholder="e.g. GERMANY2026"
+                        className="w-full p-2 bg-white border border-slate-200 rounded-lg font-mono font-bold"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Generated Social Link */}
+                  <div className="flex items-center gap-2 pt-1">
+                    <input
+                      type="text"
+                      readOnly
+                      value={socialTrackedUrl}
+                      className="w-full bg-white px-3 py-2 border border-blue-200 rounded-xl text-xs font-mono text-blue-900 select-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(socialTrackedUrl);
+                        setCopiedSocialLink(true);
+                        setTimeout(() => setCopiedSocialLink(false), 2000);
+                      }}
+                      className="px-3.5 py-2 bg-[#00215C] hover:bg-[#255CC1] text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition flex-shrink-0"
+                    >
+                      {copiedSocialLink ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{copiedSocialLink ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 2: External Website Embed Script */}
+            {linksModalTab === 'embed' && (
+              <div className="space-y-3 animate-in fade-in duration-150">
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 leading-relaxed">
+                  <strong>Connect External Websites:</strong> Paste this lightweight 1-line script tag into your WordPress, Webflow, Squarespace, Framer, Wix, or custom HTML page. It automatically connects all lead submissions directly to TerraTern.
+                </div>
+
+                <div className="relative">
+                  <div className="flex items-center justify-between pb-1 text-[11px] font-bold text-slate-500 uppercase">
+                    <span>1-Line Connector Snippet</span>
+                    <span className="font-mono text-slate-400">async load</span>
+                  </div>
+                  <pre className="p-3 bg-slate-900 text-emerald-400 rounded-xl text-xs font-mono overflow-x-auto whitespace-pre select-all">
+                    {embedScript}
+                  </pre>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(embedScript);
+                      setCopiedEmbedScript(true);
+                      setTimeout(() => setCopiedEmbedScript(false), 2000);
+                    }}
+                    className="absolute top-7 right-2.5 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 transition shadow-xs"
+                  >
+                    {copiedEmbedScript ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedEmbedScript ? 'Copied' : 'Copy Snippet'}</span>
+                  </button>
+                </div>
+
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600 space-y-1">
+                  <span className="font-bold text-slate-800 block">How it works:</span>
+                  <p>&bull; Listens to any standard HTML form on your external website.</p>
+                  <p>&bull; Automatically normalizes Indian & international phone numbers (+91 / E.164).</p>
+                  <p>&bull; Captures and attributes UTM source tags, keywords, and referral URLs.</p>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 3: API & Webhook */}
+            {linksModalTab === 'api' && (
+              <div className="space-y-3 animate-in fade-in duration-150">
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block">
+                    Page Key (Permanent Identifier)
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={effectiveKey}
+                      className="w-full bg-white px-3 py-2 border border-slate-200 rounded-xl text-xs font-mono text-slate-800 select-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(effectiveKey);
+                        setCopiedKey(true);
+                        setTimeout(() => setCopiedKey(false), 2000);
+                      }}
+                      className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition flex-shrink-0"
+                    >
+                      {copiedKey ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{copiedKey ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="relative">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
+                    ManyChat External Request Payload (POST {originUrl}/api/v1/leads)
+                  </span>
+                  <pre className="p-3 bg-slate-900 text-slate-100 rounded-xl text-xs font-mono overflow-x-auto whitespace-pre select-all">
+{JSON.stringify(
+  {
+    page_key: effectiveKey,
+    phone: "{{phone}}",
+    name: "{{full_name}}",
+    email: "{{email}}",
+    source: "ig_dm",
+    keyword: campaignKeyword || customKeyword || config.keyword_suggestion || "GENERAL",
+    consent: true,
+  },
+  null,
+  2
+)}
+                  </pre>
+                </div>
+              </div>
+            )}
+
+            {/* Modal Bottom Actions */}
+            <div className="flex justify-between items-center pt-2 border-t border-slate-100">
+              <span className="text-[11px] text-slate-400 font-mono truncate max-w-[200px]">
+                Key: {effectiveKey}
               </span>
               <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  readOnly
-                  value={baseLiveUrl}
-                  className="w-full bg-white px-3 py-2 border border-slate-200 rounded-xl text-xs font-mono text-slate-800"
-                />
                 <button
                   type="button"
                   onClick={() => {
-                    navigator.clipboard.writeText(baseLiveUrl);
-                    setCopiedLink(true);
-                    setTimeout(() => setCopiedLink(false), 2000);
+                    setIsLinksModalOpen(false);
+                    router.push('/admin/pages');
                   }}
-                  className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition flex-shrink-0"
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition"
                 >
-                  {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copiedLink ? 'Copied' : 'Copy'}</span>
+                  Go to Pages Management
                 </button>
-                <a
-                  href={baseLiveUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="p-2 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl transition flex-shrink-0"
-                  title="Open live page in new window"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                </a>
-              </div>
-            </div>
-
-            {/* Social DM & ManyChat Link Builder */}
-            <div className="p-4 bg-blue-50/60 border border-blue-200/80 rounded-2xl space-y-3">
-              <div className="flex items-center gap-2 text-[#00215C]">
-                <Share2 className="w-4 h-4 text-[#255CC1]" />
-                <h4 className="font-bold text-xs uppercase tracking-wider">
-                  Social DM / ManyChat Campaign Link
-                </h4>
-              </div>
-              <p className="text-xs text-slate-600">
-                Generate attribution parameters to track conversions by keyword and post.
-              </p>
-
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
-                    Channel Source
-                  </label>
-                  <select
-                    value={socialPlatform}
-                    onChange={(e) => setSocialPlatform(e.target.value)}
-                    className="w-full p-2 bg-white border border-slate-200 rounded-lg font-semibold"
-                  >
-                    <option value="ig_dm">Instagram DM</option>
-                    <option value="ig_bio">Instagram Bio</option>
-                    <option value="fb_ad">Facebook Ads</option>
-                    <option value="wa_chat">WhatsApp Direct</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
-                    Campaign Keyword
-                  </label>
-                  <input
-                    type="text"
-                    value={campaignKeyword}
-                    onChange={(e) => setCampaignKeyword(e.target.value)}
-                    placeholder="e.g. GERMANY2026"
-                    className="w-full p-2 bg-white border border-slate-200 rounded-lg font-mono font-bold"
-                  />
-                </div>
-              </div>
-
-              {/* Generated Social Link */}
-              <div className="flex items-center gap-2 pt-1">
-                <input
-                  type="text"
-                  readOnly
-                  value={socialTrackedUrl}
-                  className="w-full bg-white px-3 py-2 border border-blue-200 rounded-xl text-xs font-mono text-blue-900"
-                />
                 <button
                   type="button"
-                  onClick={() => {
-                    navigator.clipboard.writeText(socialTrackedUrl);
-                    setCopiedSocialLink(true);
-                    setTimeout(() => setCopiedSocialLink(false), 2000);
-                  }}
-                  className="px-3.5 py-2 bg-[#00215C] hover:bg-[#255CC1] text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition flex-shrink-0"
+                  onClick={() => setIsLinksModalOpen(false)}
+                  className="px-4 py-2 bg-[#00215C] hover:bg-[#255CC1] text-white text-xs font-bold rounded-xl transition shadow-xs"
                 >
-                  {copiedSocialLink ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copiedSocialLink ? 'Copied' : 'Copy'}</span>
+                  Done
                 </button>
               </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setPublishedPage(null);
-                  router.push('/admin/pages');
-                }}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition"
-              >
-                Go to Pages Management
-              </button>
-              <button
-                type="button"
-                onClick={() => setPublishedPage(null)}
-                className="px-4 py-2 bg-[#00215C] hover:bg-[#255CC1] text-white text-xs font-bold rounded-xl transition shadow-xs"
-              >
-                Keep Editing in Studio
-              </button>
             </div>
           </div>
         </Modal>
