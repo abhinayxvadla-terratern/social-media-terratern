@@ -31,6 +31,20 @@ interface VibePagePreviewProps {
 }
 
 export function VibePagePreview({ config, onLeadSubmitPreview, previewMode = true }: VibePagePreviewProps) {
+  // If custom HTML is provided, render isolated sandbox iframe for 100% design fidelity
+  if (config.custom_html && config.custom_html.trim().length > 30) {
+    return (
+      <div className="w-full h-full bg-white relative">
+        <iframe
+          srcDoc={config.custom_html}
+          title={config.name || "Live Page Preview"}
+          className="w-full h-full border-0 bg-white"
+          sandbox="allow-scripts allow-forms allow-same-origin allow-popups"
+        />
+      </div>
+    );
+  }
+
   // Step state for quiz / calculator
   const [activeStep, setActiveStep] = useState<'quiz' | 'calculating' | 'lead' | 'result'>('quiz');
   const [activeQuestionIdx, setActiveQuestionIdx] = useState(0);

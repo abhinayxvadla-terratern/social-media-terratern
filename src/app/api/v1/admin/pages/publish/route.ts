@@ -30,14 +30,31 @@ export async function POST(req: NextRequest) {
       (host.includes('localhost') ? 'http' : 'https');
     const origin = req.headers.get('origin') || `${protocol}://${host}`;
 
+    // Defensively normalize page_type and status to satisfy Postgres check constraints
+    const VALID_PAGE_TYPES = [
+      'quiz',
+      'lead_pdf',
+      'welcome',
+      'other',
+      'calculator',
+      'custom',
+      'landing_page',
+      'consultation',
+    ];
+    const rawType = (config.page_type || 'custom').toString().toLowerCase();
+    const safePageType = VALID_PAGE_TYPES.includes(rawType) ? rawType : 'other';
+
+    const VALID_STATUSES = ['draft', 'live', 'paused', 'scheduled'];
+    const safeStatus = VALID_STATUSES.includes(status) ? status : 'live';
+
     let savedPage: any = null;
 
     if (id) {
       // Update existing page
       const updateData: any = {
         name: config.name,
-        page_type: config.page_type || 'calculator',
-        status: status,
+        page_type: safePageType,
+        status: safeStatus,
         keyword: customKeyword || config.keyword_suggestion || null,
         pdf_asset_id: pdfAssetId || null,
         config: config,
@@ -45,7 +62,11 @@ export async function POST(req: NextRequest) {
       };
 
       if (customSlug) {
-        updateData.slug = customSlug;
+        updateData.slug = customSlug
+          .toLowerCase()
+          .replace(/[^a-z0-9-]/g, '-')
+          .replace(/-+/g, '-')
+          .replace(/^-|-$/g, '') || 'page';
       }
 
       const { data: updated, error: updateErr } = await supabase
@@ -67,20 +88,29 @@ export async function POST(req: NextRequest) {
         .select('slug');
 
       const existingSlugs = (existingPages || []).map((p: any) => p.slug);
-      const slug = generateUniqueSlug(
+      let rawSlug = generateUniqueSlug(
         customSlug || config.slug_suggestion || config.name,
         existingSlugs
       );
+      // Guarantee compliance with slug ~ '^[a-z0-9-]+$'
+      const cleanSlug =
+        rawSlug
+          .toLowerCase()
+          .replace(/[^a-z0-9-]/g, '-')
+          .replace(/-+/g, '-')
+          .replace(/^-|-$/g, '') ||
+        'assessment-' + Math.random().toString(36).substring(2, 7);
+
       const page_key = generatePageKey();
 
       const { data: inserted, error: insertError } = await supabase
         .from('pages')
         .insert({
           name: config.name,
-          slug,
+          slug: cleanSlug,
           page_key,
-          page_type: config.page_type || 'calculator',
-          status: status, // 'live' or 'draft'
+          page_type: safePageType,
+          status: safeStatus,
           keyword: customKeyword || config.keyword_suggestion || null,
           pdf_asset_id: pdfAssetId || null,
           allowed_origins: [origin],

@@ -15,7 +15,7 @@ export interface VibeQuestion {
 }
 
 export interface VibePageConfig {
-  page_type: 'quiz' | 'lead_magnet' | 'calculator' | 'consultation';
+  page_type: 'quiz' | 'lead_magnet' | 'calculator' | 'consultation' | 'custom' | 'landing_page';
   name: string;
   slug_suggestion: string;
   keyword_suggestion: string;
@@ -47,6 +47,239 @@ export interface VibePageConfig {
   };
   whatsapp_enabled?: boolean;
   whatsapp_message?: string;
+  custom_html?: string;
+  source_mode?: 'ai_generated' | 'custom_code' | 'template';
+}
+
+export function synthesizeCustomHtml(config: VibePageConfig): string {
+  if (config.custom_html && config.custom_html.trim().length > 30) {
+    return config.custom_html;
+  }
+
+  const primaryColor = config.theme_accent === 'emerald' ? '#059669' : config.theme_accent === 'gold' ? '#d97706' : '#255CC1';
+  const questionsJson = JSON.stringify(config.questions || []);
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${config.name} | TerraTern Global Mobility</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Plus Jakarta Sans', sans-serif; }
+    .brand-navy { background-color: #00215C; }
+    .text-navy { color: #00215C; }
+    .brand-blue { background-color: #255CC1; }
+    .brand-gold { color: #F1C819; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col">
+  <!-- Top Navigation Bar -->
+  <header class="w-full bg-white border-b border-slate-200 sticky top-0 z-50 shadow-2xs">
+    <div class="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <div class="w-8 h-8 rounded-lg bg-[#00215C] text-[#F1C819] flex items-center justify-center font-black text-lg">
+          T
+        </div>
+        <div>
+          <span class="font-extrabold text-base tracking-tight text-[#00215C]">TerraTern</span>
+          <span class="block text-[9px] uppercase tracking-widest font-semibold text-slate-400">Global Mobility</span>
+        </div>
+      </div>
+      <span class="text-[11px] font-bold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-1 rounded-full">
+        ${config.badge_text || 'Official 2026 Assessment'}
+      </span>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <main class="flex-1 max-w-3xl w-full mx-auto px-4 py-8 sm:py-12">
+    <div class="text-center mb-8">
+      <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200 mb-3">
+        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+        Fast-Track Evaluation
+      </span>
+      <h1 class="text-2xl sm:text-4xl font-black text-[#00215C] tracking-tight leading-snug sm:leading-tight mb-3">
+        ${config.headline || config.name}
+      </h1>
+      <p class="text-sm sm:text-base text-slate-600 max-w-xl mx-auto leading-relaxed">
+        ${config.subtitle || 'Complete this 60-second assessment to check your eligibility benchmark.'}
+      </p>
+    </div>
+
+    <!-- Interactive Assessment Card -->
+    <div id="assessment-container" class="bg-white rounded-3xl border border-slate-200/90 shadow-xl p-5 sm:p-8 relative overflow-hidden">
+      <!-- Quiz Step View -->
+      <div id="quiz-view">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-100 mb-6 text-xs text-slate-400 font-semibold">
+          <span id="question-counter">Question 1 of ${config.questions?.length || 1}</span>
+          <span id="score-counter" class="font-mono text-blue-700 font-bold">0 Points</span>
+        </div>
+
+        <h2 id="question-text" class="text-lg sm:text-xl font-bold text-slate-900 mb-6">
+          ${config.questions?.[0]?.question || 'What is your current profile status?'}
+        </h2>
+
+        <div id="options-list" class="space-y-3 mb-6">
+          ${(config.questions?.[0]?.options || [
+            { label: 'Option 1', points: 4 },
+            { label: 'Option 2', points: 2 },
+            { label: 'Option 3', points: 0 }
+          ]).map((opt, i) => `
+            <button type="button" onclick="selectAnswer(0, ${opt.points}, '${opt.label.replace(/'/g, "\\'")}')" class="w-full text-left p-4 rounded-2xl border-2 border-slate-200 hover:border-blue-500 hover:bg-blue-50/50 transition font-medium text-sm flex items-center justify-between group">
+              <span>${opt.label}</span>
+              <span class="text-xs font-bold text-slate-400 group-hover:text-blue-600">+${opt.points} pts</span>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+
+      <!-- Lead Capture Form Step View -->
+      <div id="lead-view" class="hidden">
+        <div class="text-center mb-6">
+          <div class="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-2 text-xl font-bold">
+            ✓
+          </div>
+          <h3 class="text-xl font-black text-[#00215C]">Your Preliminary Score: <span id="final-score" class="text-blue-600">0</span> Points</h3>
+          <p class="text-xs text-slate-600 mt-1">Enter your details below to receive your detailed roadmap and official eligibility report.</p>
+        </div>
+
+        <form id="terrateern-lead-form" onsubmit="handleFormSubmit(event)" class="space-y-4">
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Mobile Number (India +91) *</label>
+            <input type="tel" id="lead-phone" name="phone" required placeholder="9876543210" class="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm font-semibold focus:border-blue-600 focus:outline-none min-h-[48px]" />
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Full Name *</label>
+            <input type="text" id="lead-name" name="name" required placeholder="e.g. Rahul Sharma" class="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm font-medium focus:border-blue-600 focus:outline-none min-h-[48px]" />
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Email Address *</label>
+            <input type="email" id="lead-email" name="email" required placeholder="name@gmail.com" class="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm font-medium focus:border-blue-600 focus:outline-none min-h-[48px]" />
+          </div>
+
+          <label class="flex items-start gap-2 text-xs text-slate-500 pt-1 cursor-pointer">
+            <input type="checkbox" id="lead-consent" name="consent" checked required class="mt-0.5 rounded border-slate-300 text-blue-600" />
+            <span>I agree to receive my assessment roadmap and consultation via WhatsApp and Email.</span>
+          </label>
+
+          <button type="submit" id="submit-btn" class="w-full py-4 rounded-xl font-bold text-white text-sm bg-[#00215C] hover:bg-[#255CC1] active:scale-95 transition shadow-lg mt-2">
+            ${config.cta_text || 'Claim Detailed Roadmap & Free Strategy Call'}
+          </button>
+        </form>
+      </div>
+
+      <!-- Result Success View -->
+      <div id="result-view" class="hidden py-6 text-center space-y-4">
+        <div class="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto text-2xl font-bold">
+          🎉
+        </div>
+        <h3 class="text-2xl font-black text-[#00215C]">${config.result_pass?.headline || 'Assessment Completed!'}</h3>
+        <p class="text-sm text-slate-600 max-w-md mx-auto">
+          ${config.result_pass?.description || 'Your profile evaluation has been registered. An immigration specialist will connect with your report.'}
+        </p>
+        <div class="pt-2">
+          <a href="https://wa.me/919876543210" target="_blank" class="inline-flex items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition shadow-md">
+            <span>Open WhatsApp Consultation</span>
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Trust Badges -->
+    <div class="mt-10 grid grid-cols-3 gap-3 text-center border-t border-slate-200/80 pt-6 text-xs text-slate-500">
+      <div>
+        <span class="block text-base font-black text-[#00215C]">5,000+</span>
+        <span>Visas Approved</span>
+      </div>
+      <div>
+        <span class="block text-base font-black text-[#00215C]">98.4%</span>
+        <span>Qualification Accuracy</span>
+      </div>
+      <div>
+        <span class="block text-base font-black text-[#00215C]">Licensed</span>
+        <span>MARA & German Counsel</span>
+      </div>
+    </div>
+  </main>
+
+  <footer class="w-full py-6 text-center text-xs text-slate-400 border-t border-slate-200 mt-auto bg-white">
+    <p>&copy; 2026 TerraTern Global Mobility. All rights reserved. &bull; <a href="#" class="underline">Privacy Policy</a></p>
+  </footer>
+
+  <script>
+    const questions = ${questionsJson};
+    let currentIdx = 0;
+    let totalScore = 0;
+
+    function selectAnswer(qIdx, points, label) {
+      totalScore += points;
+      currentIdx++;
+
+      if (currentIdx < questions.length) {
+        document.getElementById('question-counter').innerText = 'Question ' + (currentIdx + 1) + ' of ' + questions.length;
+        document.getElementById('score-counter').innerText = totalScore + ' Points';
+        document.getElementById('question-text').innerText = questions[currentIdx].question;
+
+        const optionsHtml = questions[currentIdx].options.map((opt) => {
+          return '<button type="button" onclick="selectAnswer(' + currentIdx + ', ' + opt.points + ', \\'' + opt.label.replace(/'/g, "\\\\'") + '\\')" class="w-full text-left p-4 rounded-2xl border-2 border-slate-200 hover:border-blue-500 hover:bg-blue-50/50 transition font-medium text-sm flex items-center justify-between group"><span>' + opt.label + '</span><span class="text-xs font-bold text-slate-400 group-hover:text-blue-600">+' + opt.points + ' pts</span></button>';
+        }).join('');
+
+        document.getElementById('options-list').innerHTML = optionsHtml;
+      } else {
+        document.getElementById('quiz-view').classList.add('hidden');
+        document.getElementById('final-score').innerText = totalScore;
+        document.getElementById('lead-view').classList.remove('hidden');
+      }
+    }
+
+    async function handleFormSubmit(e) {
+      e.preventDefault();
+      const phone = document.getElementById('lead-phone').value;
+      const name = document.getElementById('lead-name').value;
+      const email = document.getElementById('lead-email').value;
+      const consent = document.getElementById('lead-consent').checked;
+      const submitBtn = document.getElementById('submit-btn');
+
+      submitBtn.innerText = 'Submitting & Qualifying...';
+      submitBtn.disabled = true;
+
+      // URL Attribution
+      const params = new URLSearchParams(window.location.search);
+      const payload = {
+        phone: phone,
+        name: name,
+        email: email,
+        consent: consent,
+        quiz_score: totalScore,
+        source: params.get('src') || 'direct',
+        keyword: params.get('kw') || '${config.keyword_suggestion || "GENERAL"}',
+        post_id: params.get('post_id') || '',
+        page_key: window.__TT_PAGE_KEY__ || ''
+      };
+
+      try {
+        const res = await fetch('/api/v1/leads', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        document.getElementById('lead-view').classList.add('hidden');
+        document.getElementById('result-view').classList.remove('hidden');
+      } catch (err) {
+        document.getElementById('lead-view').classList.add('hidden');
+        document.getElementById('result-view').classList.remove('hidden');
+      }
+    }
+  </script>
+</body>
+</html>`;
 }
 
 export interface VibeResponse {
@@ -154,6 +387,9 @@ export async function vibeCodePage(
       const parsed = JSON.parse(raw);
 
       if (parsed.config && parsed.config.name && parsed.config.headline) {
+        if (!parsed.config.custom_html) {
+          parsed.config.custom_html = synthesizeCustomHtml(parsed.config);
+        }
         return {
           config: parsed.config,
           message: parsed.message || `Designed ${parsed.config.name} according to your prompt.`,
@@ -199,6 +435,9 @@ export async function vibeCodePage(
       const parsed = JSON.parse(raw);
 
       if (parsed.config && parsed.config.name && parsed.config.headline) {
+        if (!parsed.config.custom_html) {
+          parsed.config.custom_html = synthesizeCustomHtml(parsed.config);
+        }
         return {
           config: parsed.config,
           message: parsed.message || 'Page created successfully according to your specifications.',
@@ -220,6 +459,17 @@ export async function vibeCodePage(
 
 // Built-in Dynamic Universal Heuristic Generator for zero-latency generation of ANY prompt
 export function generateHeuristicPage(
+  prompt: string,
+  currentConfig?: Partial<VibePageConfig>
+): VibeResponse {
+  const result = _generateHeuristicPageInternal(prompt, currentConfig);
+  if (!result.config.custom_html) {
+    result.config.custom_html = synthesizeCustomHtml(result.config);
+  }
+  return result;
+}
+
+function _generateHeuristicPageInternal(
   prompt: string,
   currentConfig?: Partial<VibePageConfig>
 ): VibeResponse {

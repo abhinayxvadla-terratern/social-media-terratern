@@ -87,6 +87,10 @@ export function PageTypeBadge({ type }: PageTypeBadgeProps) {
     lead_pdf: { label: "PDF Download", icon: "📄" },
     welcome: { label: "Welcome Page", icon: "👋" },
     other: { label: "Landing Page", icon: "🌐" },
+    calculator: { label: "Points Calculator", icon: "🧮" },
+    custom: { label: "Custom Platform", icon: "✨" },
+    landing_page: { label: "Landing Page", icon: "🚀" },
+    consultation: { label: "Consultation Form", icon: "📞" },
   };
 
   const item = labels[type] || labels.other;

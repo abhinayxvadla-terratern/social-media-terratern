@@ -8,7 +8,15 @@ export interface AdminUser {
 }
 
 export type PageStatus = "draft" | "live" | "paused" | "scheduled";
-export type PageType = "quiz" | "lead_pdf" | "welcome" | "other";
+export type PageType =
+  | "quiz"
+  | "lead_pdf"
+  | "welcome"
+  | "other"
+  | "calculator"
+  | "custom"
+  | "landing_page"
+  | "consultation";
 
 export interface Page {
   id: string;

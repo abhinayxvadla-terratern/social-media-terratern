@@ -279,6 +279,35 @@ export default function NativePublicLandingPage({ params }: DynamicPageProps) {
     );
   }
 
+  // Render Full Custom Platform / HTML Page if configured
+  if (config.custom_html && config.custom_html.trim().length > 30) {
+    let finalHtml = config.custom_html;
+    const injection = `
+      <script>
+        window.__TT_PAGE_KEY__ = "${page.page_key}";
+        window.__TT_PAGE_SLUG__ = "${page.slug}";
+      </script>
+      <script src="/connect.js" data-page-key="${page.page_key}" async></script>
+    `;
+
+    if (finalHtml.includes('</body>')) {
+      finalHtml = finalHtml.replace('</body>', `${injection}</body>`);
+    } else {
+      finalHtml += injection;
+    }
+
+    return (
+      <div className="w-full min-h-screen bg-slate-50 flex flex-col">
+        <iframe
+          srcDoc={finalHtml}
+          title={page.name || "Assessment"}
+          className="w-full min-h-screen flex-1 border-0"
+          sandbox="allow-scripts allow-forms allow-same-origin allow-popups"
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans select-none">
       {/* Connector Script */}
