@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TerraTern Opportunity Card Eligibility (External Embed Example)</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f8fafc;
+      color: #0f172a;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 16px;
+    }
+    .card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 16px;
+      padding: 32px 24px;
+      max-width: 440px;
+      width: 100%;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+    }
+    .badge {
+      display: inline-block;
+      background: #eff6ff;
+      color: #0f1f6e;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+    }
+    h1 { font-size: 22px; color: #0f1f6e; font-weight: 800; margin-bottom: 8px; line-height: 1.25; }
+    p.sub { font-size: 13px; color: #64748b; margin-bottom: 24px; line-height: 1.4; }
+    .form-group { margin-bottom: 16px; }
+    label { display: block; font-size: 12px; font-weight: 700; color: #334155; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+    input[type="text"], input[type="email"], input[type="tel"] {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      font-size: 14px;
+      outline: none;
+      transition: all 0.2s;
+    }
+    input:focus { border-color: #1e3ae2; box-shadow: 0 0 0 3px rgba(30, 58, 226, 0.12); }
+    .consent-group { display: flex; gap: 8px; margin: 18px 0; align-items: flex-start; }
+    .consent-group input { margin-top: 3px; }
+    .consent-group label { font-size: 12px; color: #64748b; font-weight: normal; text-transform: none; line-height: 1.4; cursor: pointer; }
+    button[type="submit"] {
+      width: 100%;
+      background: #0f1f6e;
+      color: #ffffff;
+      padding: 14px;
+      border: none;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.2s, opacity 0.2s;
+    }
+    button[type="submit"]:hover:not(:disabled) { background: #1e3ae2; }
+    button[type="submit"]:disabled { background: #cbd5e1; cursor: not-allowed; }
+  </style>
+
+  <!-- TerraTern Page Connector Script (One Tag) -->
+  <!-- Replace data-page-key with your actual page key from /admin/pages -->
+  <script
+    src="/connect.js"
+    data-page-key="YOUR_PAGE_KEY_FROM_ADMIN"
+    async
+  ></script>
+</head>
+<body>
+
+  <div class="card">
+    <span class="badge">Official Lead Engine Embed</span>
+    <h1>Germany Opportunity Card 2026</h1>
+    <p class="sub">Check your eligibility points and claim the 2026 Immigration Guide PDF.</p>
+
+    <!-- The form automatically binds to connect.js -->
+    <form id="terrateern-lead-form">
+      <!-- Phone First -->
+      <div class="form-group">
+        <label for="phone">Phone (India +91) *</label>
+        <input type="tel" id="phone" name="phone" placeholder="9876543210" required>
+      </div>
+
+      <!-- Full Name -->
+      <div class="form-group">
+        <label for="name">Full Name *</label>
+        <input type="text" id="name" name="name" placeholder="Rahul Sharma" required>
+      </div>
+
+      <!-- Email -->
+      <div class="form-group">
+        <label for="email">Email Address *</label>
+        <input type="email" id="email" name="email" placeholder="rahul@example.com" required>
+      </div>
+
+      <!-- Consent -->
+      <div class="consent-group">
+        <input type="checkbox" id="consent" name="consent" checked required>
+        <label for="consent">I agree to receive assessment results from TerraTern.</label>
+      </div>
+
+      <button type="submit" disabled>Submit &amp; Claim Guide</button>
+    </form>
+  </div>
+
+</body>
+</html>
