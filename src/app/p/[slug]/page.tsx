@@ -38,12 +38,14 @@ export default function NativePublicLandingPage({ params }: DynamicPageProps) {
   // Tracking params parsed from URL
   const [tracking, setTracking] = useState<{
     source: string;
-    keyword: string;
-    postId: string;
+    keyword: string | null;
+    postId: string | null;
+    utm: Record<string, string>;
   }>({
     source: 'direct',
-    keyword: 'GENERAL',
-    postId: '',
+    keyword: null,
+    postId: null,
+    utm: {},
   });
 
   // Step state for quiz / calculator
@@ -67,10 +69,17 @@ export default function NativePublicLandingPage({ params }: DynamicPageProps) {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
+      const utmObj: Record<string, string> = {};
+      ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'].forEach((k) => {
+        const val = urlParams.get(k);
+        if (val) utmObj[k] = val;
+      });
+
       setTracking({
-        source: urlParams.get('src') || urlParams.get('utm_source') || 'direct',
-        keyword: urlParams.get('kw') || urlParams.get('utm_term') || 'GENERAL',
-        postId: urlParams.get('post_id') || urlParams.get('utm_campaign') || '',
+        source: urlParams.get('utm_source') || urlParams.get('src') || urlParams.get('source') || 'direct',
+        keyword: urlParams.get('utm_term') || urlParams.get('kw') || urlParams.get('keyword') || null,
+        postId: urlParams.get('utm_content') || urlParams.get('post_id') || urlParams.get('post') || null,
+        utm: utmObj,
       });
     }
 
@@ -176,9 +185,10 @@ export default function NativePublicLandingPage({ params }: DynamicPageProps) {
           consent: true,
           quiz_score: totalPoints,
           quiz_result: isQualified ? 'Qualified / High Match' : 'Pathway Review Recommended',
-          source: tracking.source,
-          keyword: tracking.keyword || page.keyword || 'GENERAL',
+          source: tracking.source || 'direct',
+          keyword: tracking.keyword || null,
           post_id: tracking.postId || null,
+          utm: tracking.utm || {},
         }),
       });
 

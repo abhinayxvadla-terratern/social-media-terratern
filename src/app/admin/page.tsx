@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { Page, Lead, PageStat, DailyTrend } from '@/lib/types';
 import { useAdmin } from '@/contexts/AdminContext';
 import { formatNumber, formatPercentage, formatDate } from '@/lib/utils';
+import { cleanPageName } from '@/lib/vibe-engine';
 import { getCachedData, setCachedData } from '@/lib/client-cache';
 import {
   Users,
@@ -28,6 +29,101 @@ import {
   Flame,
 } from 'lucide-react';
 
+interface TrafficChannelItem {
+  channel: string;
+  source: string;
+  count: number;
+  percentage: number;
+  color: string;
+  dotColor: string;
+}
+
+function getChannelInfo(source: string | null | undefined): { label: string; color: string; dotColor: string } {
+  const s = (source || '').toLowerCase().trim();
+  if (!s || s === 'direct' || s === 'direct / organic' || s === 'none' || s === 'null') {
+    return {
+      label: 'Direct / Organic',
+      color: 'bg-slate-700',
+      dotColor: 'bg-slate-500',
+    };
+  }
+  if (s.includes('ig') || s.includes('instagram')) {
+    if (s.includes('dm')) {
+      return {
+        label: 'Instagram DM',
+        color: 'bg-gradient-to-r from-purple-500 to-pink-500',
+        dotColor: 'bg-pink-500',
+      };
+    }
+    if (s.includes('bio')) {
+      return {
+        label: 'Instagram Bio',
+        color: 'bg-pink-500',
+        dotColor: 'bg-pink-500',
+      };
+    }
+    return {
+      label: 'Instagram',
+      color: 'bg-gradient-to-r from-purple-500 to-pink-500',
+      dotColor: 'bg-pink-500',
+    };
+  }
+  if (s.includes('wa') || s.includes('whatsapp')) {
+    return {
+      label: 'WhatsApp Direct',
+      color: 'bg-emerald-500',
+      dotColor: 'bg-emerald-500',
+    };
+  }
+  if (s.includes('fb') || s.includes('facebook')) {
+    return {
+      label: 'Facebook Ads',
+      color: 'bg-blue-600',
+      dotColor: 'bg-blue-600',
+    };
+  }
+  if (s.includes('linkedin')) {
+    return {
+      label: 'LinkedIn',
+      color: 'bg-sky-600',
+      dotColor: 'bg-sky-600',
+    };
+  }
+  if (s.includes('youtube') || s.includes('yt')) {
+    return {
+      label: 'YouTube',
+      color: 'bg-red-600',
+      dotColor: 'bg-red-600',
+    };
+  }
+  if (s.includes('google')) {
+    return {
+      label: 'Google Search / Ads',
+      color: 'bg-amber-500',
+      dotColor: 'bg-amber-500',
+    };
+  }
+  if (s.includes('email') || s.includes('newsletter')) {
+    return {
+      label: 'Email Campaign',
+      color: 'bg-indigo-600',
+      dotColor: 'bg-indigo-600',
+    };
+  }
+  if (s.includes('manychat')) {
+    return {
+      label: 'ManyChat Automation',
+      color: 'bg-purple-600',
+      dotColor: 'bg-purple-600',
+    };
+  }
+  return {
+    label: s.charAt(0).toUpperCase() + s.slice(1),
+    color: 'bg-blue-500',
+    dotColor: 'bg-blue-500',
+  };
+}
+
 export default function AdminOverviewDashboard() {
   const { canEdit, userRole } = useAdmin();
   const supabase = createClient();
@@ -36,11 +132,13 @@ export default function AdminOverviewDashboard() {
     pages: Page[];
     recentLeads: Lead[];
     stats: any;
+    trafficChannels?: TrafficChannelItem[];
   }>('admin_overview');
 
   const [loading, setLoading] = useState(() => !cached);
   const [pages, setPages] = useState<Page[]>(() => cached?.pages || []);
   const [recentLeads, setRecentLeads] = useState<Lead[]>(() => cached?.recentLeads || []);
+  const [trafficChannels, setTrafficChannels] = useState<TrafficChannelItem[]>(() => cached?.trafficChannels || []);
   const [stats, setStats] = useState<{
     totalLeads: number;
     completeLeads: number;
@@ -86,11 +184,37 @@ export default function AdminOverviewDashboard() {
           .from('page_stats')
           .select('*');
 
+        // 4. Fetch Traffic Channels from leads_by_source
+        const { data: sourceData } = await supabase
+          .from('leads_by_source')
+          .select('*');
+
         const allPages = (pagesData as Page[]) || [];
         const allLeads = (leadsData as Lead[]) || [];
         const allStats = (pageStatsData as PageStat[]) || [];
 
-        setPages(allPages);
+        // Build stats lookup map
+        const statsMap = new Map<string, { leads: number; conversion: number }>();
+        allStats.forEach((s: any) => {
+          statsMap.set(s.page_id, {
+            leads: Number(s.leads || 0),
+            conversion: Number(s.conversion_percentage || 0),
+          });
+        });
+
+        // Merge stats with pages so leads_count and conversion_percentage are properly populated
+        const mergedPages = allPages
+          .map((p: any) => {
+            const stat = statsMap.get(p.id);
+            return {
+              ...p,
+              leads_count: stat?.leads ?? 0,
+              conversion_percentage: stat?.conversion ?? 0,
+            };
+          })
+          .sort((a, b) => (b.leads_count || 0) - (a.leads_count || 0));
+
+        setPages(mergedPages);
         setRecentLeads(allLeads);
 
         // Aggregate Metrics
@@ -127,10 +251,40 @@ export default function AdminOverviewDashboard() {
 
         setStats(newStats);
 
+        // Aggregate Traffic Channels from real database records
+        const channelCounts: Record<string, number> = {};
+        (sourceData || []).forEach((row: any) => {
+          const raw = (row.source || 'direct / organic').toLowerCase().trim();
+          channelCounts[raw] = (channelCounts[raw] || 0) + (row.total_leads || 0);
+        });
+
+        if (Object.keys(channelCounts).length === 0 && totalL > 0) {
+          channelCounts['direct / organic'] = totalL;
+        }
+
+        const totalChanneled = Object.values(channelCounts).reduce((a, b) => a + b, 0) || totalL || 1;
+
+        const channels: TrafficChannelItem[] = Object.entries(channelCounts)
+          .map(([src, count]) => {
+            const info = getChannelInfo(src);
+            return {
+              channel: info.label,
+              source: src,
+              count,
+              percentage: Math.round((count / totalChanneled) * 100),
+              color: info.color,
+              dotColor: info.dotColor,
+            };
+          })
+          .sort((a, b) => b.count - a.count);
+
+        setTrafficChannels(channels);
+
         setCachedData('admin_overview', {
-          pages: allPages,
+          pages: mergedPages,
           recentLeads: allLeads,
           stats: newStats,
+          trafficChannels: channels,
         });
       } catch (err) {
         console.error('Failed to load overview analytics:', err);
@@ -246,9 +400,9 @@ export default function AdminOverviewDashboard() {
         </div>
       </div>
 
-      {/* 3. Middle Grid: Funnel & Social Media Performance */}
+      {/* 3. Middle Grid: Funnel & Inbound Traffic Routing */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* Left: Conversion Funnel (2 Cols) */}
+        {/* Left: User Conversion Funnel (2 Cols) */}
         <div className="lg:col-span-2 bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/80 shadow-2xs space-y-4">
           <div className="flex items-center justify-between">
             <div>
@@ -264,14 +418,14 @@ export default function AdminOverviewDashboard() {
             </Link>
           </div>
 
-          <div className="space-y-3 pt-2">
+          <div className="space-y-3.5 pt-2">
             {/* Step 1: Views */}
             <div className="space-y-1.5">
               <div className="flex justify-between text-xs font-semibold">
-                <span className="text-slate-600">1. Total Page Views</span>
-                <span className="font-bold text-[#00215C]">{stats.totalViews}</span>
+                <span className="text-slate-700">1. Total Page Views</span>
+                <span className="font-bold text-[#00215C] font-mono">{stats.totalViews} (100%)</span>
               </div>
-              <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+              <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
                 <div
                   className="bg-[#00215C] h-full rounded-full transition-all duration-500"
                   style={{ width: stats.totalViews > 0 ? '100%' : '0%' }}
@@ -279,107 +433,131 @@ export default function AdminOverviewDashboard() {
               </div>
             </div>
 
-            {/* Step 2: Starts */}
-            <div className="space-y-1.5">
-              <div className="flex justify-between text-xs font-semibold">
-                <span className="text-slate-600">2. Assessment / Quiz Starts</span>
-                <span className="font-bold text-[#255CC1]">
-                  {stats.totalStarts}
-                  {stats.totalViews > 0 && stats.totalStarts > 0
-                    ? ` (${Math.round((stats.totalStarts / stats.totalViews) * 100)}%)`
-                    : ''}
-                </span>
-              </div>
-              <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                <div
-                  className="bg-[#255CC1] h-full rounded-full transition-all duration-500"
-                  style={{
-                    width: stats.totalViews > 0 && stats.totalStarts > 0
-                      ? `${Math.min(100, (stats.totalStarts / stats.totalViews) * 100)}%`
-                      : '0%',
-                  }}
-                ></div>
-              </div>
-            </div>
+            {/* Step 2: Form Inquiries Initiated */}
+            {(() => {
+              const initiated = Math.max(stats.totalStarts, stats.totalLeads);
+              const initiatedPct = stats.totalViews > 0 ? Math.min(100, Math.round((initiated / stats.totalViews) * 100)) : (initiated > 0 ? 100 : 0);
 
-            {/* Step 3: Qualified Leads */}
-            <div className="space-y-1.5">
-              <div className="flex justify-between text-xs font-semibold">
-                <span className="text-slate-600">3. Verified Leads Captured</span>
-                <span className="font-bold text-emerald-600">
-                  {stats.totalLeads}
-                  {stats.totalViews > 0 && stats.totalLeads > 0
-                    ? ` (${Math.round((stats.totalLeads / stats.totalViews) * 100)}%)`
-                    : ''}
-                </span>
-              </div>
-              <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                <div
-                  className="bg-emerald-500 h-full rounded-full transition-all duration-500"
-                  style={{
-                    width: stats.totalViews > 0 && stats.totalLeads > 0
-                      ? `${Math.min(100, (stats.totalLeads / stats.totalViews) * 100)}%`
-                      : '0%',
-                  }}
-                ></div>
-              </div>
-            </div>
+              return (
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-xs font-semibold">
+                    <span className="text-slate-700">2. Inquiries Initiated</span>
+                    <span className="font-bold text-[#255CC1] font-mono">
+                      {initiated} ({initiatedPct}%)
+                    </span>
+                  </div>
+                  <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                    <div
+                      className="bg-[#255CC1] h-full rounded-full transition-all duration-500"
+                      style={{ width: `${initiatedPct}%` }}
+                    ></div>
+                  </div>
+                </div>
+              );
+            })()}
 
-            {/* Step 4: Documents Downloaded */}
-            <div className="space-y-1.5">
-              <div className="flex justify-between text-xs font-semibold">
-                <span className="text-slate-600">4. Guide Documents Delivered</span>
-                <span className="font-bold text-indigo-600">{stats.totalDownloads}</span>
-              </div>
-              <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                <div
-                  className="bg-indigo-500 h-full rounded-full transition-all duration-500"
-                  style={{
-                    width: stats.totalLeads > 0 && stats.totalDownloads > 0
-                      ? `${Math.min(100, (stats.totalDownloads / stats.totalLeads) * 100)}%`
-                      : '0%',
-                  }}
-                ></div>
-              </div>
-            </div>
+            {/* Step 3: Verified Leads Captured */}
+            {(() => {
+              const leadsPct = stats.totalViews > 0 ? Math.min(100, Math.round((stats.totalLeads / stats.totalViews) * 100)) : (stats.totalLeads > 0 ? 100 : 0);
+
+              return (
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-xs font-semibold">
+                    <span className="text-slate-700">3. Verified Leads Captured</span>
+                    <span className="font-bold text-emerald-600 font-mono">
+                      {stats.totalLeads} ({leadsPct}%)
+                    </span>
+                  </div>
+                  <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                    <div
+                      className="bg-emerald-500 h-full rounded-full transition-all duration-500"
+                      style={{ width: `${leadsPct}%` }}
+                    ></div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Step 4: Qualified Conversions */}
+            {(() => {
+              const complete = stats.completeLeads > 0 ? stats.completeLeads : stats.totalLeads;
+              const ratePct = stats.conversionRate > 0
+                ? Math.min(100, Math.round(stats.conversionRate))
+                : (stats.totalViews > 0 ? Math.min(100, Math.round((complete / stats.totalViews) * 100)) : (complete > 0 ? 100 : 0));
+
+              return (
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-xs font-semibold">
+                    <span className="text-slate-700">4. Qualified Complete Leads</span>
+                    <span className="font-bold text-indigo-600 font-mono">
+                      {complete} verified ({ratePct}%)
+                    </span>
+                  </div>
+                  <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                    <div
+                      className="bg-indigo-600 h-full rounded-full transition-all duration-500"
+                      style={{ width: `${ratePct}%` }}
+                    ></div>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
 
-        {/* Right: Traffic Channels */}
-        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/80 shadow-2xs space-y-4">
+        {/* Right: Real Inbound Traffic Channels */}
+        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/80 shadow-2xs space-y-4 flex flex-col justify-between">
           <div>
-            <h2 className="text-base font-bold text-slate-900">Traffic Channels</h2>
-            <p className="text-xs text-slate-500">Inbound source breakdown.</p>
+            <div className="flex items-center justify-between pb-1">
+              <div>
+                <h2 className="text-base font-bold text-slate-900">Traffic Channels</h2>
+                <p className="text-xs text-slate-500">Inbound source breakdown.</p>
+              </div>
+              <Link
+                href="/admin/leads"
+                className="text-xs font-bold text-[#255CC1] hover:underline"
+              >
+                View Leads &rarr;
+              </Link>
+            </div>
+
+            {trafficChannels.length === 0 ? (
+              <div className="py-10 text-center text-xs text-slate-400">
+                No campaign traffic recorded yet.
+              </div>
+            ) : (
+              <div className="space-y-3 pt-3">
+                {trafficChannels.map((item, idx) => (
+                  <div key={idx} className="space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2.5 h-2.5 rounded-full ${item.dotColor}`}></span>
+                        <span className="font-bold text-slate-800">{item.channel}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 font-mono text-xs">
+                        <span className="font-extrabold text-[#00215C]">
+                          {item.count} {item.count === 1 ? 'lead' : 'leads'}
+                        </span>
+                        <span className="text-slate-400 font-semibold">({item.percentage}%)</span>
+                      </div>
+                    </div>
+                    <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${item.color}`}
+                        style={{ width: `${Math.max(6, item.percentage)}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
-          {stats.totalLeads === 0 ? (
-            <div className="py-8 text-center text-xs text-slate-400">
-              No campaign traffic recorded yet.
-            </div>
-          ) : (
-            <div className="space-y-3 pt-1">
-              {[
-                { channel: 'Instagram DM (ManyChat)', code: 'ig_dm', count: Math.round(stats.totalLeads * 0.65), color: 'bg-gradient-to-r from-purple-500 to-pink-500' },
-                { channel: 'Instagram Bio', code: 'ig_bio', count: Math.round(stats.totalLeads * 0.18), color: 'bg-pink-500' },
-                { channel: 'LinkedIn Post', code: 'linkedin', count: Math.round(stats.totalLeads * 0.10), color: 'bg-blue-600' },
-                { channel: 'YouTube / Direct', code: 'direct', count: Math.round(stats.totalLeads * 0.07), color: 'bg-red-600' },
-              ].filter(c => c.count > 0).map((item, idx) => (
-                <div key={idx} className="flex items-center justify-between text-xs py-1.5 border-b border-slate-100 last:border-0">
-                  <div className="flex items-center gap-2">
-                    <span className={`w-2 h-2 rounded-full ${item.color}`}></span>
-                    <span className="font-semibold text-slate-700">{item.channel}</span>
-                  </div>
-                  <span className="font-bold text-[#00215C]">{item.count} leads</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl text-xs text-slate-600">
-            <p className="font-semibold text-slate-800 mb-0.5">UTM Tracking</p>
-            <p className="text-[11px] text-slate-500 leading-relaxed">
-              Inbound links capture UTM parameters, keywords, and campaign IDs automatically.
-            </p>
+          <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+            <span>Total Attributed Leads</span>
+            <span className="font-bold text-slate-900 font-mono">
+              {stats.totalLeads} {stats.totalLeads === 1 ? 'lead' : 'leads'}
+            </span>
           </div>
         </div>
       </div>
@@ -408,37 +586,45 @@ export default function AdminOverviewDashboard() {
             </div>
           ) : (
             <div className="space-y-2">
-              {pages.slice(0, 5).map((page) => (
-                <div
-                  key={page.id}
-                  className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between gap-3 text-xs"
-                >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <span
-                      className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                        page.status === 'live' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'
-                      }`}
-                    ></span>
-                    <div className="min-w-0">
-                      <h4 className="font-bold text-slate-900 truncate">{page.name}</h4>
-                      <p className="text-[11px] text-slate-400 font-mono truncate">/p/{page.slug}</p>
+              {pages.slice(0, 5).map((page) => {
+                const displayName = cleanPageName(page.name);
+                return (
+                  <div
+                    key={page.id}
+                    className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between gap-3 text-xs hover:bg-slate-100/70 transition"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span
+                        className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                          page.status === 'live' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'
+                        }`}
+                        title={`Status: ${page.status}`}
+                      ></span>
+                      <div className="min-w-0">
+                        <h4 className="font-bold text-slate-900 truncate" title={displayName}>
+                          {displayName}
+                        </h4>
+                        <p className="text-[11px] text-slate-400 font-mono truncate">/p/{page.slug}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2.5 flex-shrink-0">
+                      <span className="font-extrabold text-[#255CC1] font-mono bg-blue-50 border border-blue-200/70 px-2.5 py-0.5 rounded-lg text-xs">
+                        {formatNumber(page.leads_count || 0)} {page.leads_count === 1 ? 'lead' : 'leads'}
+                      </span>
+                      <a
+                        href={`/p/${page.slug}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="p-1 text-slate-400 hover:text-slate-800 transition"
+                        title="Open live page in new tab"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
                     </div>
                   </div>
-
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <span className="font-bold text-[#255CC1]">{page.leads_count || 0} leads</span>
-                    <a
-                      href={`/p/${page.slug}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="p-1 text-slate-400 hover:text-slate-800"
-                      title="Open page"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </a>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

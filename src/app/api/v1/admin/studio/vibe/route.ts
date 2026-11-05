@@ -40,13 +40,13 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { prompt, currentConfig, history } = body || {};
+    const { prompt, currentConfig, history, attachedFile } = body || {};
 
     if (!prompt || typeof prompt !== 'string') {
       return NextResponse.json({ error: 'Prompt string is required' }, { status: 400 });
     }
 
-    const result = await vibeCodePage(prompt, currentConfig, history);
+    const result = await vibeCodePage(prompt, currentConfig, history, attachedFile);
     return NextResponse.json({ success: true, ...result });
   } catch (err: any) {
     console.error('Vibe API Route Error:', err);

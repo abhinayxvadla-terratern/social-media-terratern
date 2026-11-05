@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServiceClient } from '@/lib/api-security';
+import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { generateUniqueSlug, generatePageKey } from '@/lib/utils';
 
 export async function POST(req: NextRequest) {
@@ -21,7 +22,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const supabase = getSupabaseServiceClient();
+    let supabase: any = getSupabaseServiceClient();
+    try {
+      const serverClient = await createServerSupabaseClient();
+      const { data: { user } } = await serverClient.auth.getUser();
+      if (user) {
+        supabase = serverClient;
+      }
+    } catch {
+      // Fallback to service client if cookies are unavailable
+    }
 
     // Determine origin base URL
     const host = req.headers.get('host') || 'localhost:3000';
@@ -131,9 +141,7 @@ export async function POST(req: NextRequest) {
 
     const live_url = `${origin}/p/${savedPage.slug}`;
     const embed_script = `<script src="${origin}/connect.js" data-page-key="${savedPage.page_key}" async></script>`;
-    const social_tracked_url = `${live_url}?src=ig_dm&kw=${encodeURIComponent(
-      savedPage.keyword || 'GENERAL'
-    )}&post_id=reel_101`;
+    const social_tracked_url = live_url; // Direct clean URL by default, no inbuilt UTM
 
     return NextResponse.json({
       success: true,

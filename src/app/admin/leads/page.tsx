@@ -10,6 +10,7 @@ import {
   formatNumber,
   exportToCSV,
 } from "@/lib/utils";
+import { cleanPageName } from "@/lib/vibe-engine";
 import {
   Search,
   Download,
@@ -30,6 +31,26 @@ import {
   Share2,
 } from "lucide-react";
 import { getCachedData, setCachedData } from "@/lib/client-cache";
+
+function formatDateParts(dateString: string | null | undefined): { date: string; time: string } {
+  if (!dateString) return { date: "—", time: "" };
+  try {
+    const d = new Date(dateString);
+    const date = new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }).format(d);
+    const time = new Intl.DateTimeFormat("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    }).format(d);
+    return { date, time };
+  } catch {
+    return { date: dateString, time: "" };
+  }
+}
 
 export default function LeadsManagementPage() {
   const { userRole } = useAdmin();
@@ -430,6 +451,9 @@ export default function LeadsManagementPage() {
                       <p className="text-xs text-slate-500 font-mono mt-0.5">
                         {lead.email || "No email"}
                       </p>
+                      <span className="text-[10px] text-slate-400 font-mono block mt-0.5">
+                        {formatDateParts(lead.created_at).date} &bull; {formatDateParts(lead.created_at).time}
+                      </span>
                     </div>
                   </div>
 
@@ -464,18 +488,18 @@ export default function LeadsManagementPage() {
                   </div>
                 </div>
 
-                {/* Footer */}
-                <div className="flex items-center justify-between text-xs text-slate-400 pt-1">
-                  <div className="flex items-center gap-1.5 truncate max-w-[180px]">
-                    <span className="truncate">{lead.page?.name || "General Page"}</span>
-                    {lead.keyword && (
-                      <span className="px-1.5 py-0.5 rounded bg-blue-50 text-[#255CC1] border border-blue-200 text-[9px] font-bold uppercase">
-                        {lead.keyword}
-                      </span>
-                    )}
+                {/* Footer with Source Medium, Program & Quick Contact */}
+                <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
+                  <div className="flex items-center gap-1.5 truncate max-w-[200px]">
+                    <span className="font-semibold text-slate-700 truncate">
+                      {cleanPageName(lead.page?.name || lead.quiz_result || "General Assessment")}
+                    </span>
+                    <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 text-[9px] font-bold">
+                      {lead.source || "direct"}
+                    </span>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                     {lead.phone_e164 && (
                       <a
                         href={`https://wa.me/${lead.phone_e164.replace('+', '')}?text=Hi%20${encodeURIComponent(
@@ -483,148 +507,166 @@ export default function LeadsManagementPage() {
                         )},%20thank%20you%20for%20contacting%20TerraTern.`}
                         target="_blank"
                         rel="noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="p-1.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition"
+                        className="p-2 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition"
                         title="Chat on WhatsApp"
                       >
-                        <MessageCircle className="w-3.5 h-3.5" />
+                        <MessageCircle className="w-4 h-4" />
                       </a>
                     )}
-                    <div className="flex items-center gap-0.5 text-blue-600 font-bold">
-                      <span>Timeline</span>
+                    {lead.email && (
+                      <a
+                        href={`mailto:${lead.email}?subject=TerraTern%20Assessment`}
+                        className="p-2 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition"
+                        title="Send Email"
+                      >
+                        <Mail className="w-4 h-4" />
+                      </a>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleOpenLeadDetails(lead)}
+                      className="px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-700 font-bold text-xs flex items-center gap-0.5"
+                    >
+                      <span>Details</span>
                       <ChevronRight className="w-3.5 h-3.5" />
-                    </div>
+                    </button>
                   </div>
                 </div>
               </div>
             ))}
           </div>
 
-          {/* DESKTOP VIEW (>= 768px): Full Data Table */}
+          {/* DESKTOP VIEW (>= 768px): Full Data Table (Format: Date & Time | Name | Email | Contact | Page | Source Medium | Action) */}
           <div className="hidden md:block bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs sm:text-sm">
                 <thead>
-                  <tr className="bg-slate-50/75 border-b border-slate-200 text-slate-400 text-[11px] font-bold uppercase tracking-wider">
-                    <th className="py-3 px-4">Contact</th>
-                    <th className="py-3 px-4">Page</th>
-                    <th className="py-3 px-4">Score & Result</th>
-                    <th className="py-3 px-4">Source & Keyword</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4">Date</th>
-                    <th className="py-3 px-4 text-right">Details</th>
+                  <tr className="bg-slate-50/85 border-b border-slate-200 text-slate-500 text-[11px] font-bold uppercase tracking-wider">
+                    <th className="py-3.5 px-3.5 whitespace-nowrap">Date & Time</th>
+                    <th className="py-3.5 px-3">Name</th>
+                    <th className="py-3.5 px-3">Email</th>
+                    <th className="py-3.5 px-3 whitespace-nowrap">Contact</th>
+                    <th className="py-3.5 px-3">Page</th>
+                    <th className="py-3.5 px-3 whitespace-nowrap">Source Medium</th>
+                    <th className="py-3.5 px-3 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filteredLeads.map((lead) => (
-                    <tr
-                      key={lead.id}
-                      onClick={() => handleOpenLeadDetails(lead)}
-                      className="hover:bg-slate-50/70 transition-colors cursor-pointer group"
-                    >
-                      {/* Contact */}
-                      <td className="py-3.5 px-4">
-                        <div className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
-                          {lead.name || "Anonymous Lead"}
-                        </div>
-                        <div className="text-xs text-slate-500 font-mono mt-0.5">
-                          {lead.email || lead.phone_e164 || "No direct contact"}
-                        </div>
-                      </td>
+                  {filteredLeads.map((lead) => {
+                    const rawSource = (lead.source || lead.utm?.utm_source || "direct").toLowerCase();
+                    const mediumLabel =
+                      rawSource === "ig_dm"
+                        ? "Instagram DM"
+                        : rawSource === "ig_bio"
+                        ? "Instagram Bio"
+                        : rawSource === "wa_chat" || rawSource === "whatsapp"
+                        ? "WhatsApp"
+                        : rawSource === "fb_ad"
+                        ? "Facebook Ads"
+                        : rawSource === "yt_bio"
+                        ? "YouTube"
+                        : rawSource.charAt(0).toUpperCase() + rawSource.slice(1);
 
-                      {/* Page */}
-                      <td className="py-3.5 px-4 max-w-xs truncate text-slate-700">
-                        {lead.page?.name || "Page"}
-                      </td>
+                    const mediumBadgeClass =
+                      rawSource.includes("ig")
+                        ? "bg-purple-50 text-purple-700 border-purple-200"
+                        : rawSource.includes("wa")
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                        : rawSource.includes("fb")
+                        ? "bg-blue-50 text-blue-700 border-blue-200"
+                        : "bg-slate-100 text-slate-700 border-slate-200";
 
-                      {/* Score & Result */}
-                      <td className="py-3.5 px-4">
-                        {lead.quiz_score !== null ? (
-                          <div className="flex items-center gap-2">
-                            <span className="font-black text-blue-600">
-                              {lead.quiz_score} pts
-                            </span>
-                            {lead.quiz_result && (
-                              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200 truncate max-w-[120px]">
-                                {lead.quiz_result}
+                    const dateParts = formatDateParts(lead.created_at);
+                    const displayName = cleanPageName(lead.page?.name || lead.quiz_result || "General Assessment");
+
+                    return (
+                      <tr
+                        key={lead.id}
+                        onClick={() => handleOpenLeadDetails(lead)}
+                        className="hover:bg-slate-50/80 transition-colors cursor-pointer group"
+                      >
+                        {/* 1. Date and below it Time */}
+                        <td className="py-3.5 px-3.5 text-xs whitespace-nowrap font-medium">
+                          <div className="font-bold text-slate-800">{dateParts.date}</div>
+                          <div className="text-[11px] text-slate-400 font-mono flex items-center gap-1 mt-0.5">
+                            <Clock className="w-3 h-3 text-slate-400" />
+                            <span>{dateParts.time}</span>
+                          </div>
+                        </td>
+
+                        {/* 2. Name */}
+                        <td className="py-3.5 px-3 font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
+                          <div className="truncate max-w-[150px]">{lead.name || "Anonymous Lead"}</div>
+                        </td>
+
+                        {/* 3. Email */}
+                        <td className="py-3.5 px-3 text-xs text-slate-600 font-mono">
+                          <div className="truncate max-w-[180px]">{lead.email || "—"}</div>
+                        </td>
+
+                        {/* 4. Contact */}
+                        <td className="py-3.5 px-3 text-xs font-mono font-bold text-slate-800 whitespace-nowrap">
+                          {lead.phone_e164 || "—"}
+                        </td>
+
+                        {/* 5. Page (Named cleanly, not raw prompt) */}
+                        <td className="py-3.5 px-3">
+                          <div className="truncate max-w-[220px] font-bold text-slate-800 text-xs" title={lead.page?.name || displayName}>
+                            {displayName}
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            {lead.page?.slug ? (
+                              <a
+                                href={`/p/${lead.page.slug}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="inline-flex items-center gap-1 text-[11px] font-mono text-blue-700 hover:text-blue-900 hover:underline"
+                              >
+                                <span>/{lead.page.slug}</span>
+                                <ExternalLink className="w-2.5 h-2.5 text-slate-400" />
+                              </a>
+                            ) : (
+                              <span className="text-slate-400 font-mono text-[11px]">/direct</span>
+                            )}
+                            {lead.quiz_score !== null && (
+                              <span className="text-[10px] font-mono text-blue-600 font-bold">
+                                &bull; {lead.quiz_score} pts
                               </span>
                             )}
                           </div>
-                        ) : (
-                          <span className="text-slate-400">—</span>
-                        )}
-                      </td>
+                        </td>
 
-                      {/* Source & Keyword */}
-                      <td className="py-3.5 px-4">
-                        <div className="font-semibold text-slate-800 capitalize">
-                          {lead.source || "Direct"}
-                        </div>
-                        {lead.keyword && (
-                          <div className="text-xs text-slate-400 truncate max-w-[140px]">
-                            {lead.keyword}
-                          </div>
-                        )}
-                      </td>
-
-                      {/* Status */}
-                      <td className="py-3.5 px-4">
-                        <span
-                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
-                            lead.is_partial
-                              ? "bg-amber-50 text-amber-700 border-amber-200/80"
-                              : "bg-emerald-50 text-emerald-700 border-emerald-200/80"
-                          }`}
-                        >
-                          <span
-                            className={`w-1.5 h-1.5 rounded-full ${
-                              lead.is_partial ? "bg-amber-500" : "bg-emerald-500"
-                            }`}
-                          />
-                          {lead.is_partial ? "Partial" : "Complete"}
-                        </span>
-                      </td>
-
-                      {/* Date */}
-                      <td className="py-3.5 px-4 text-xs text-slate-500 whitespace-nowrap">
-                        {formatDate(lead.created_at)}
-                      </td>
-
-                      {/* Details & Actions */}
-                      <td className="py-3.5 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {lead.phone_e164 && (
-                            <a
-                              href={`https://wa.me/${lead.phone_e164.replace('+', '')}?text=Hi%20${encodeURIComponent(
-                                lead.name || ''
-                              )},%20thank%20you%20for%20contacting%20TerraTern.`}
-                              target="_blank"
-                              rel="noreferrer"
-                              onClick={(e) => e.stopPropagation()}
-                              className="p-1.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition"
-                              title="Chat on WhatsApp"
-                            >
-                              <MessageCircle className="w-3.5 h-3.5" />
-                            </a>
-                          )}
-                          {lead.phone_e164 && (
-                            <a
-                              href={`tel:${lead.phone_e164}`}
-                              onClick={(e) => e.stopPropagation()}
-                              className="p-1.5 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition"
-                              title="Direct Phone Call"
-                            >
-                              <Phone className="w-3.5 h-3.5" />
-                            </a>
-                          )}
-                          <span className="text-xs font-semibold text-blue-600 group-hover:translate-x-0.5 inline-flex items-center transition-transform pl-1">
-                            <span>Details</span>
-                            <ChevronRight className="w-3.5 h-3.5 ml-0.5" />
+                        {/* 6. Source Medium */}
+                        <td className="py-3.5 px-3 whitespace-nowrap">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${mediumBadgeClass}`}>
+                            {mediumLabel}
                           </span>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                          {lead.keyword && (
+                            <span className="text-[10px] text-slate-400 font-mono block mt-0.5">
+                              kw: {lead.keyword}
+                            </span>
+                          )}
+                        </td>
+
+                        {/* 7. Action */}
+                        <td className="py-3.5 px-3 text-right">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenLeadDetails(lead);
+                            }}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-[#00215C] text-slate-700 hover:text-white font-bold text-xs transition shadow-2xs"
+                            title="View full lead timeline & answers"
+                          >
+                            <span>Details</span>
+                            <ChevronRight className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

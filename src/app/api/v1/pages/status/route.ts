@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
       id, name, slug, page_type, status, start_at, end_at,
       closed_message, closed_redirect_url, allowed_origins,
       pdf_asset_id, page_key, config,
-      assets (id, name, storage_path)
+      pdf_asset:assets (id, name, storage_path)
     `);
 
   if (pageKey) {
@@ -81,7 +81,8 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const asset = Array.isArray(page.assets) ? page.assets[0] : page.assets;
+  const rawAsset = page.pdf_asset ?? (page as any).assets;
+  const asset: any = Array.isArray(rawAsset) ? rawAsset[0] : rawAsset;
 
   return NextResponse.json(
     {

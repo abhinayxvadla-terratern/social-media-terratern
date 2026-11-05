@@ -250,17 +250,24 @@ export function synthesizeCustomHtml(config: VibePageConfig): string {
       submitBtn.innerText = 'Submitting & Qualifying...';
       submitBtn.disabled = true;
 
-      // URL Attribution
+      // URL Attribution (Clean direct by default; captures custom UTM if present)
       const params = new URLSearchParams(window.location.search);
+      const utmObj = {};
+      ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'].forEach((k) => {
+        const v = params.get(k);
+        if (v) utmObj[k] = v;
+      });
+
       const payload = {
         phone: phone,
         name: name,
         email: email,
         consent: consent,
         quiz_score: totalScore,
-        source: params.get('src') || 'direct',
-        keyword: params.get('kw') || '${config.keyword_suggestion || "GENERAL"}',
-        post_id: params.get('post_id') || '',
+        source: params.get('utm_source') || params.get('src') || params.get('source') || 'direct',
+        keyword: params.get('utm_term') || params.get('kw') || params.get('keyword') || null,
+        post_id: params.get('utm_content') || params.get('post_id') || null,
+        utm: utmObj,
         page_key: window.__TT_PAGE_KEY__ || ''
       };
 
@@ -288,79 +295,80 @@ export interface VibeResponse {
   suggestions: string[];
 }
 
-const SYSTEM_PROMPT = `You are TerraTern's AI Landing Page Architect and Vibe-Coder.
+const SYSTEM_PROMPT = `You are TerraTern's Elite Full-Stack Vibe-Coding Engine (operating like Lovable, v0.dev, and Google AI Studio).
 TerraTern is a premier global mobility and immigration consultancy (Canada Express Entry & PNP, Germany Opportunity Card, Australia PR, UK Skilled Worker, Schengen, Dubai Golden Visa, USA EB/O-1, Ireland Critical Skills).
-Your job is to generate and iteratively refine high-converting, mobile-first lead capture assessment pages based on user prompts.
 
-BRAND IDENTITY & STYLING TOKENS:
-- Brand Deep Navy: #00215C (accent: 'navy')
-- Brand Royal Blue: #255CC1 (accent: 'blue')
-- Accent Gold: #F1C819 (accent: 'gold')
-- Accent Emerald: #3CBD2C (accent: 'emerald')
+YOUR GOAL:
+Given any prompt (and optional attached document/code/brief), build a COMPLETE, tailored, modern, high-converting web platform or landing page in full HTML with Tailwind CSS.
+
+KEY CAPABILITIES:
+1. You can build ANY KIND of platform or page:
+   - Interactive points calculators & immigration eligibility wizards
+   - Multi-step qualification quizzes with score counters & calculations
+   - High-ticket consultation scheduling pages
+   - Real estate & investor visa evaluation portals
+   - University / scholarship admission estimators
+   - Downloadable PR guide / PDF lead magnets
+2. In the generated "custom_html", you MUST provide complete, valid HTML:
+   - Include Tailwind CSS CDN (<script src="https://cdn.tailwindcss.com"></script>)
+   - Include Google Fonts ('Plus Jakarta Sans')
+   - A modern navigation bar with TerraTern logo & live badge
+   - A captivating hero section with social proof
+   - Rich interactive components matching the user's specific prompt
+   - A verified TerraTern Lead Capture form:
+     <form id="terrateern-lead-form">
+       - Mobile number input (with +91 international formatting)
+       - Full name input
+       - Email address input
+       - Consent checkbox
+       - Conversion CTA submit button
+     </form>
+   - Trust proof (5,000+ approvals, 4.9/5 rating, licensed advisors)
+   - Clean responsive footer
+3. Always make the design stunning, mobile-first, and ultra-professional.
+4. NAMING RULE: The "name" field must be a short, professional, 2-5 word Page Title (e.g. "Dubai Golden Visa Evaluation", "Canada CRS Calculator", "Welcome & PDF Guide"). NEVER name the page after the raw prompt or use instructional phrases like "Make a page...", "Create a...", or "Ask user to fill...".
 
 RESPONSE FORMAT:
-You MUST respond with valid JSON ONLY matching this exact schema:
+You MUST respond with valid JSON ONLY matching this structure:
 {
   "config": {
-    "page_type": "calculator",
-    "name": "Short descriptive page name",
-    "slug_suggestion": "kebab-case-slug",
+    "name": "Short, professional 2-5 word page title (e.g. 'Canada Express Entry CRS Calculator')",
+    "slug_suggestion": "clean-kebab-slug",
     "keyword_suggestion": "UPPERCASE_KEYWORD",
-    "badge_text": "e.g. Official 2026 Assessment",
+    "badge_text": "Live 2026 Assessment",
     "headline": "Punchy conversion-focused headline",
-    "subtitle": "Clear benefit and instructions in 1-2 sentences",
-    "cta_text": "Action-oriented button text",
+    "subtitle": "Clear benefit and instructions",
+    "cta_text": "Action button text",
     "theme_accent": "blue",
-    "qualification_threshold": 6,
-    "max_points": 10,
-    "questions": [
-      {
-        "id": "q1",
-        "question_number": 1,
-        "question": "Clear question text?",
-        "category": "Category",
-        "options": [
-          { "label": "Option A description", "points": 4 },
-          { "label": "Option B description", "points": 2 },
-          { "label": "Option C description", "points": 0 }
-        ]
-      }
-    ],
-    "result_pass": {
-      "headline": "High Eligibility Qualified",
-      "description": "Your profile meets the target benchmark.",
-      "badge": "Qualified",
-      "cta_text": "Claim Official Roadmap & Schedule Review"
-    },
-    "result_review": {
-      "headline": "Pathway Review Recommended",
-      "description": "Your score indicates alternative pathways or enhancement is needed.",
-      "badge": "Pathway Review",
-      "cta_text": "Request Profile Strategy Session"
-    },
-    "whatsapp_enabled": true,
-    "whatsapp_message": "Hi TerraTern, I just completed the assessment."
+    "page_type": "custom",
+    "custom_html": "<!DOCTYPE html><html lang=\\"en\\"><head><meta charset=\\"UTF-8\\"><meta name=\\"viewport\\" content=\\"width=device-width, initial-scale=1.0\\"><title>Title</title><script src=\\"https://cdn.tailwindcss.com\\"></script><link href=\\"https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap\\" rel=\\"stylesheet\\"><style>body{font-family:'Plus Jakarta Sans',sans-serif;}</style></head><body class=\\"bg-slate-50 text-slate-800 antialiased min-h-screen\\">...full layout with hero, interactive widget, and lead capture form...</body></html>"
   },
-  "message": "Friendly 1-2 sentence response of what was designed or modified.",
-  "suggestions": ["Follow-up suggestion 1", "Follow-up suggestion 2", "Follow-up suggestion 3"]
+  "message": "Friendly explanation of what was designed or modified.",
+  "suggestions": ["Follow-up prompt 1", "Follow-up prompt 2", "Follow-up prompt 3"]
 }`;
 
 export async function vibeCodePage(
   prompt: string,
   currentConfig?: Partial<VibePageConfig>,
-  chatHistory: { role: 'user' | 'assistant'; content: string }[] = []
+  chatHistory: { role: 'user' | 'assistant'; content: string }[] = [],
+  attachedFile?: { name: string; content: string; type?: string } | null
 ): Promise<VibeResponse> {
   const geminiKey = process.env.GEMINI_API_KEY;
   const groqKey = process.env.GROQ_API_KEY;
+
+  let userPrompt = prompt;
+  if (attachedFile && attachedFile.content) {
+    userPrompt += `\n\n[ATTACHED FILE: ${attachedFile.name}]\n${attachedFile.content.substring(0, 10000)}`;
+  }
 
   // 1. PRIMARY ENGINE: Google Gemini 3.5 Flash Lite
   if (geminiKey) {
     try {
       const ai = new GoogleGenAI({ apiKey: geminiKey });
 
-      let userPrompt = prompt;
+      let enrichedPrompt = userPrompt;
       if (currentConfig && Object.keys(currentConfig).length > 0) {
-        userPrompt = `Current Page Configuration:\n${JSON.stringify(currentConfig, null, 2)}\n\nUser Revision Request:\n${prompt}\n\nUpdate the configuration while preserving existing fields unless the user specifically asked to alter them. Return valid JSON only matching the schema.`;
+        enrichedPrompt = `Current Page Configuration & Code:\n${JSON.stringify(currentConfig, null, 2)}\n\nUser Revision Request:\n${userPrompt}\n\nUpdate the configuration and custom_html while preserving existing design elements unless the user specifically asked to alter them. Return valid JSON only matching the schema.`;
       }
 
       // Add recent chat history if available
@@ -372,7 +380,7 @@ export async function vibeCodePage(
           .join('\n');
       }
 
-      const fullPrompt = `${SYSTEM_PROMPT}\n\n${conversationContext ? `Conversation History:\n${conversationContext}\n\n` : ''}User Prompt:\n${userPrompt}`;
+      const fullPrompt = `${SYSTEM_PROMPT}\n\n${conversationContext ? `Conversation History:\n${conversationContext}\n\n` : ''}User Prompt:\n${enrichedPrompt}`;
 
       const res = await ai.models.generateContent({
         model: 'gemini-3.5-flash-lite',
@@ -386,7 +394,8 @@ export async function vibeCodePage(
       const raw = res.text || '{}';
       const parsed = JSON.parse(raw);
 
-      if (parsed.config && parsed.config.name && parsed.config.headline) {
+      if (parsed.config && parsed.config.name) {
+        parsed.config.name = cleanPageName(parsed.config.name);
         if (!parsed.config.custom_html) {
           parsed.config.custom_html = synthesizeCustomHtml(parsed.config);
         }
@@ -394,9 +403,9 @@ export async function vibeCodePage(
           config: parsed.config,
           message: parsed.message || `Designed ${parsed.config.name} according to your prompt.`,
           suggestions: parsed.suggestions || [
-            'Add a question for language score',
-            'Change theme accent to emerald',
-            'Require higher threshold points',
+            'Add WhatsApp instant chat button',
+            'Change theme accent to luxury gold',
+            'Add client testimonial reviews',
           ],
         };
       }
@@ -416,9 +425,9 @@ export async function vibeCodePage(
         messages.push({ role: msg.role, content: msg.content });
       }
 
-      let userMessage = prompt;
+      let userMessage = userPrompt;
       if (currentConfig && Object.keys(currentConfig).length > 0) {
-        userMessage = `Current Page Configuration:\n${JSON.stringify(currentConfig, null, 2)}\n\nUser Revision Request:\n${prompt}\n\nUpdate the configuration while preserving existing fields unless the user specifically asked to alter them. Return valid JSON only.`;
+        userMessage = `Current Page Configuration & Code:\n${JSON.stringify(currentConfig, null, 2)}\n\nUser Revision Request:\n${userPrompt}\n\nUpdate the configuration and custom_html while preserving existing styling unless asked otherwise. Return valid JSON only.`;
       }
 
       messages.push({ role: 'user', content: userMessage });
@@ -428,13 +437,14 @@ export async function vibeCodePage(
         messages,
         temperature: 0.3,
         response_format: { type: 'json_object' },
-        max_tokens: 3000,
+        max_tokens: 4000,
       });
 
       const raw = completion.choices[0]?.message?.content || '{}';
       const parsed = JSON.parse(raw);
 
-      if (parsed.config && parsed.config.name && parsed.config.headline) {
+      if (parsed.config && parsed.config.name) {
+        parsed.config.name = cleanPageName(parsed.config.name);
         if (!parsed.config.custom_html) {
           parsed.config.custom_html = synthesizeCustomHtml(parsed.config);
         }
@@ -442,9 +452,9 @@ export async function vibeCodePage(
           config: parsed.config,
           message: parsed.message || 'Page created successfully according to your specifications.',
           suggestions: parsed.suggestions || [
-            'Add an IELTS band question',
-            'Make the theme accent gold',
-            'Add a free PDF guide download',
+            'Add client testimonials slider',
+            'Make the theme accent emerald',
+            'Add a free downloadable PDF checklist',
           ],
         };
       }
@@ -454,7 +464,48 @@ export async function vibeCodePage(
   }
 
   // 3. TERTIARY ENGINE: Dynamic Universal Heuristic Generator
-  return generateHeuristicPage(prompt, currentConfig);
+  return generateHeuristicPage(userPrompt, currentConfig);
+}
+
+// Cleans raw prompts or titles into clean, concise 2-5 word page names
+export function cleanPageName(text: string): string {
+  if (!text || !text.trim()) return 'Global Mobility Assessment';
+
+  const p = text.toLowerCase().trim();
+
+  // Known program categories
+  if (p.includes('dubai') || p.includes('uae')) return 'Dubai Golden Visa Evaluation';
+  if (p.includes('germany') || p.includes('chancenkarte') || p.includes('opportunity card')) return 'Germany Opportunity Card Assessment';
+  if (p.includes('canada') || p.includes('crs') || p.includes('express entry')) return 'Canada CRS Points Calculator';
+  if (p.includes('australia') || p.includes('189') || p.includes('190')) return 'Australia PR Points Assessment';
+  if (p.includes('uk') || p.includes('united kingdom') || p.includes('skilled worker')) return 'UK Skilled Worker Assessment';
+  if (p.includes('eb-5') || p.includes('eb5') || p.includes('investor')) return 'Investor Visa Consultation';
+  if (p.includes('pdf') || p.includes('download') || p.includes('checklist') || p.includes('guide')) {
+    return 'PR Roadmap & PDF Guide';
+  }
+  if (p.includes('welcome') || p.includes('consultation') || p.includes('lead')) {
+    return 'Welcome & Consultation Portal';
+  }
+  if (p.includes('calculator') || p.includes('points') || p.includes('score')) {
+    return 'Points & Qualification Calculator';
+  }
+  if (p.includes('quiz') || p.includes('eligibility') || p.includes('check')) {
+    return 'Immigration Eligibility Assessment';
+  }
+
+  // Strip prompt filler phrases
+  let clean = text
+    .replace(/^(please|can you|i want to|create|make|build|design|generate|a|an|the|page|quiz|for|landing|calculator|ask user to|fill name|email and phone|give them|download pdf option|eligibility assessment)\s+/gi, ' ')
+    .replace(/(ask user to|fill name|email and phone|give them download pdf option|eligibility assessment)\s*$/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (clean.length > 36) {
+    clean = clean.split(' ').slice(0, 4).join(' ');
+  }
+
+  if (!clean || clean.length < 3) return 'Global Immigration Assessment';
+  return clean.charAt(0).toUpperCase() + clean.slice(1);
 }
 
 // Built-in Dynamic Universal Heuristic Generator for zero-latency generation of ANY prompt
@@ -896,20 +947,19 @@ function _generateHeuristicPageInternal(
   }
 
   // 6. DYNAMIC SYNTHESIS FOR ANY CUSTOM TOPIC OR COUNTRY
-  // Clean up title words
-  const cleanTitle = prompt
-    .replace(/(create|make|build|design|generate|a|an|the|page|quiz|for|landing|calculator)\s+/gi, '')
-    .trim();
-  const formattedTitle = cleanTitle ? cleanTitle.charAt(0).toUpperCase() + cleanTitle.slice(1) : 'Global Immigration Assessment';
+  // Clean up title to ensure page is named professionally rather than its prompt
+  const cleanTitle = cleanPageName(prompt);
+  const cleanSlug = cleanTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 32);
+  const cleanKeyword = cleanSlug.split('-')[0]?.toUpperCase() || 'ASSESS';
 
   return {
     config: {
-      page_type: 'calculator',
-      name: `${formattedTitle} Eligibility Assessment`,
-      slug_suggestion: formattedTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 32),
-      keyword_suggestion: formattedTitle.toUpperCase().replace(/[^A-Z0-9]+/g, '_').slice(0, 10),
+      page_type: cleanTitle.toLowerCase().includes('pdf') ? 'lead_magnet' : cleanTitle.toLowerCase().includes('welcome') ? 'consultation' : 'calculator',
+      name: cleanTitle,
+      slug_suggestion: cleanSlug,
+      keyword_suggestion: cleanKeyword,
       badge_text: 'Verified 2026 Immigration Criteria',
-      headline: `Check Your Eligibility: ${formattedTitle}`,
+      headline: `Check Your Eligibility: ${cleanTitle}`,
       subtitle: `Evaluate your qualifications, timeline, and documentation readiness with TerraTern specialists.`,
       cta_text: 'Calculate Eligibility Score Now',
       theme_accent: 'blue',
@@ -975,9 +1025,9 @@ function _generateHeuristicPageInternal(
         cta_text: 'Schedule Confidential Profile Review',
       },
       whatsapp_enabled: true,
-      whatsapp_message: `Hi TerraTern, I completed the ${formattedTitle} assessment and would like my roadmap.`,
+      whatsapp_message: `Hi TerraTern, I completed the ${cleanTitle} assessment and would like my roadmap.`,
     },
-    message: `Generated a tailored 2026 eligibility assessment for "${formattedTitle}" with custom scoring and qualification criteria.`,
+    message: `Generated a tailored 2026 eligibility assessment for "${cleanTitle}" with custom scoring and qualification criteria.`,
     suggestions: [
       'Add a language test band requirement',
       'Change theme to Royal Navy or Gold',

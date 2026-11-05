@@ -4,7 +4,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Page, PageStatus, PageType, Asset, PageStat } from "@/lib/types";
 import { useAdmin } from "@/contexts/AdminContext";
-import { StatusBadge, PageTypeBadge } from "@/components/ui/Badge";
+import { StatusBadge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import {
   formatDate,
@@ -36,6 +36,7 @@ import {
   Link2,
 } from "lucide-react";
 import { getCachedData, setCachedData } from "@/lib/client-cache";
+import { cleanPageName } from "@/lib/vibe-engine";
 
 export default function PagesManagementPage() {
   const { userRole, canEdit, isOwner } = useAdmin();
@@ -65,12 +66,34 @@ export default function PagesManagementPage() {
   const [integrationModalPage, setIntegrationModalPage] = useState<Page | null>(null);
   const [integrationTab, setIntegrationTab] = useState<"live" | "script" | "webhook" | "curl">("live");
 
-  // Social DM Link Modal
-  const [socialModalPage, setSocialModalPage] = useState<Page | null>(null);
-  const [socialPlatform, setSocialPlatform] = useState("ig_dm");
-  const [socialKeyword, setSocialKeyword] = useState("");
-  const [socialPostId, setSocialPostId] = useState("reel_101");
-  const [copiedSocial, setCopiedSocial] = useState(false);
+  // Custom Campaign UTM Builder feature state
+  const [utmSource, setUtmSource] = useState("");
+  const [utmMedium, setUtmMedium] = useState("");
+  const [utmCampaign, setUtmCampaign] = useState("");
+  const [utmTerm, setUtmTerm] = useState("");
+  const [utmContent, setUtmContent] = useState("");
+  const [copiedUtmLink, setCopiedUtmLink] = useState(false);
+
+  const getCustomCampaignUrl = (baseSlug: string) => {
+    const baseUrl = `${origin}/p/${baseSlug}`;
+    const params = new URLSearchParams();
+    if (utmSource.trim()) params.set("utm_source", utmSource.trim().toLowerCase());
+    if (utmMedium.trim()) params.set("utm_medium", utmMedium.trim().toLowerCase());
+    if (utmCampaign.trim()) params.set("utm_campaign", utmCampaign.trim().toLowerCase());
+    if (utmTerm.trim()) params.set("utm_term", utmTerm.trim());
+    if (utmContent.trim()) params.set("utm_content", utmContent.trim());
+
+    const qs = params.toString();
+    return qs ? `${baseUrl}?${qs}` : baseUrl;
+  };
+
+  const handleResetUtm = () => {
+    setUtmSource("");
+    setUtmMedium("");
+    setUtmCampaign("");
+    setUtmTerm("");
+    setUtmContent("");
+  };
 
   // Fetch all pages and analytics stats
   const fetchPages = async () => {
@@ -358,38 +381,62 @@ export default function PagesManagementPage() {
           <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
             Total Pages
           </span>
-          <span className="text-2xl font-black text-slate-900">
-            {formatNumber(pages.length)}
-          </span>
+          <div className="flex items-baseline justify-between">
+            <span className="text-2xl font-black text-slate-900">
+              {formatNumber(pages.length)}
+            </span>
+            <span className="text-[11px] font-semibold text-slate-500">
+              {pages.filter((p) => p.status === "live").length} live &bull; {pages.filter((p) => p.status === "paused").length} paused
+            </span>
+          </div>
         </div>
 
         <div className="p-4 bg-white border border-slate-200/80 rounded-2xl shadow-sm">
           <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 block mb-1">
             Live Pages
           </span>
-          <span className="text-2xl font-black text-emerald-600">
-            {formatNumber(pages.filter((p) => p.status === "live").length)}
-          </span>
-        </div>
-
-        <div className="p-4 bg-white border border-slate-200/80 rounded-2xl shadow-sm">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-amber-500 block mb-1">
-            Drafts
-          </span>
-          <span className="text-2xl font-black text-slate-700">
-            {formatNumber(pages.filter((p) => p.status === "draft").length)}
-          </span>
+          <div className="flex items-baseline justify-between">
+            <span className="text-2xl font-black text-emerald-600">
+              {formatNumber(pages.filter((p) => p.status === "live").length)}
+            </span>
+            <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">
+              {pages.length > 0 ? Math.round((pages.filter((p) => p.status === "live").length / pages.length) * 100) : 0}% active
+            </span>
+          </div>
         </div>
 
         <div className="p-4 bg-white border border-slate-200/80 rounded-2xl shadow-sm">
           <span className="text-[11px] font-bold uppercase tracking-wider text-blue-600 block mb-1">
             Total Leads
           </span>
-          <span className="text-2xl font-black text-blue-600">
-            {formatNumber(
-              pages.reduce((acc, p) => acc + (p.leads_count || 0), 0)
-            )}
+          <div className="flex items-baseline justify-between">
+            <span className="text-2xl font-black text-blue-600">
+              {formatNumber(
+                pages.reduce((acc, p) => acc + (p.leads_count || 0), 0)
+              )}
+            </span>
+            <span className="text-[11px] font-semibold text-slate-400">
+              all-time
+            </span>
+          </div>
+        </div>
+
+        <div className="p-4 bg-white border border-slate-200/80 rounded-2xl shadow-sm">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-600 block mb-1">
+            Avg Conversion
           </span>
+          <div className="flex items-baseline justify-between">
+            <span className="text-2xl font-black text-indigo-600">
+              {pages.length > 0
+                ? formatPercentage(
+                    pages.reduce((acc, p) => acc + (p.conversion_percentage || 0), 0) / pages.length
+                  )
+                : "0.0%"}
+            </span>
+            <span className="text-[11px] font-semibold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100">
+              rate
+            </span>
+          </div>
         </div>
       </div>
 
@@ -400,7 +447,7 @@ export default function PagesManagementPage() {
           <div className="relative flex-1 max-w-md">
             <input
               type="text"
-              placeholder="Search by name, slug or keyword..."
+              placeholder="Search by page name or slug..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all"
@@ -521,17 +568,18 @@ export default function PagesManagementPage() {
         </div>
       ) : (
         <>
-          {/* MOBILE VIEW (< 768px): Stacked Cards with 44px Tap Targets */}
+          {/* MOBILE VIEW (< 768px): Clean Stacked Cards */}
           <div className="md:hidden space-y-3">
             {filteredPages.map((page) => {
               const isLive = page.status === "live";
+              const displayName = cleanPageName(page.name);
 
               return (
                 <div
                   key={page.id}
                   className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm space-y-3"
                 >
-                  {/* Top: Checkbox, Name, Status & Live Toggle */}
+                  {/* Top: Checkbox, Name, Type & Interactive Status */}
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-start gap-2.5 flex-1 min-w-0">
                       <input
@@ -541,21 +589,17 @@ export default function PagesManagementPage() {
                         className="w-4 h-4 mt-1 rounded border-slate-300 text-[#00215C] focus:ring-[#255CC1]"
                       />
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 mb-1">
-                          <PageTypeBadge type={page.page_type} />
-                          <StatusBadge status={page.status} />
-                        </div>
                         <h3 className="font-bold text-base text-slate-900 leading-snug break-words">
-                          {page.name}
+                          {displayName}
                         </h3>
-                        <div className="flex items-center gap-1 mt-1">
-                          <code className="text-xs text-blue-700 font-mono">
-                            /{page.slug}
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <code className="text-[11px] text-blue-700 bg-blue-50/80 px-2 py-0.5 rounded font-mono font-semibold">
+                            /p/{page.slug}
                           </code>
                           <button
-                            onClick={() => handleCopy(page.slug, `slug-${page.id}`)}
-                            className="p-1 text-slate-400 hover:text-slate-700"
-                            title="Copy slug"
+                            onClick={() => handleCopy(`${origin}/p/${page.slug}`, `slug-${page.id}`)}
+                            className="p-1 text-slate-400 hover:text-slate-700 rounded transition"
+                            title="Copy link"
                           >
                             {copiedId === `slug-${page.id}` ? (
                               <Check className="w-3.5 h-3.5 text-emerald-600" />
@@ -563,27 +607,43 @@ export default function PagesManagementPage() {
                               <Copy className="w-3.5 h-3.5" />
                             )}
                           </button>
+                          <a
+                            href={page.page_url || `/p/${page.slug}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="p-1 text-slate-400 hover:text-blue-600 rounded transition"
+                            title="Open Live Page"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
                         </div>
                       </div>
                     </div>
 
-                    {/* Live/Unlive Instant Toggle (Minimum 44px touch target) */}
+                    {/* Single Interactive Status Badge */}
                     {canEdit ? (
                       <button
+                        type="button"
                         onClick={() => handleToggleLive(page)}
-                        className={`touch-target px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 flex-shrink-0 ${
+                        className={`touch-target px-2.5 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 flex-shrink-0 border shadow-2xs ${
                           isLive
-                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100"
-                            : "bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200"
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200"
+                            : page.status === "draft"
+                            ? "bg-amber-50 text-amber-700 border-amber-200 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200"
+                            : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200"
                         }`}
                         title={isLive ? "Click to Pause" : "Click to Make Live"}
                       >
                         <span
                           className={`w-2 h-2 rounded-full ${
-                            isLive ? "bg-emerald-500 animate-pulse" : "bg-slate-400"
+                            isLive
+                              ? "bg-emerald-500 animate-pulse"
+                              : page.status === "draft"
+                              ? "bg-amber-500"
+                              : "bg-slate-400"
                           }`}
                         />
-                        <span>{isLive ? "LIVE" : "UNLIVE"}</span>
+                        <span className="capitalize">{page.status}</span>
                       </button>
                     ) : (
                       <StatusBadge status={page.status} />
@@ -594,7 +654,7 @@ export default function PagesManagementPage() {
                   <div className="grid grid-cols-2 gap-2 p-2.5 bg-slate-50 rounded-xl text-center">
                     <div>
                       <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                        Leads
+                        Leads Captured
                       </span>
                       <span className="text-sm font-black text-slate-800">
                         {formatNumber(page.leads_count)}
@@ -602,9 +662,9 @@ export default function PagesManagementPage() {
                     </div>
                     <div>
                       <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                        Conversion %
+                        Conversion Rate
                       </span>
-                      <span className="text-sm font-black text-blue-600">
+                      <span className="text-sm font-black text-emerald-600">
                         {formatPercentage(page.conversion_percentage)}
                       </span>
                     </div>
@@ -612,83 +672,38 @@ export default function PagesManagementPage() {
 
                   {/* Bottom: Action Buttons */}
                   <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIntegrationModalPage(page);
-                          setIntegrationTab("live");
-                        }}
-                        className="touch-target px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-[#00215C] border border-blue-200 rounded-lg text-xs font-bold flex items-center gap-1 transition"
-                        title="Get Live Page Link, ManyChat URL & Embed Code"
-                      >
-                        <Link2 className="w-3.5 h-3.5 text-[#255CC1]" />
-                        <span>Links</span>
-                      </button>
-
-                      <button
-                        onClick={() => handleCopy(page.page_key, `key-${page.id}`)}
-                        className="touch-target px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium flex items-center gap-1"
-                      >
-                        {copiedId === `key-${page.id}` ? (
-                          <Check className="w-3.5 h-3.5 text-emerald-600" />
-                        ) : (
-                          <Copy className="w-3.5 h-3.5" />
-                        )}
-                        <span>Key</span>
-                      </button>
-
-                      <a
-                        href={page.page_url || `/p/${page.slug}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="touch-target p-2 text-slate-500 hover:text-blue-600"
-                        title="Open Live Assessment"
-                      >
-                        <ExternalLink className="w-4 h-4" />
-                      </a>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSocialModalPage(page);
-                          setSocialKeyword(page.keyword || "");
-                        }}
-                        className="touch-target p-2 text-slate-500 hover:text-[#255CC1]"
-                        title="ManyChat / Social DM Link"
-                      >
-                        <Share2 className="w-4 h-4" />
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setIntegrationModalPage(page)}
-                        className="touch-target p-2 text-slate-500 hover:text-indigo-600"
-                        title="Lead Capture Setup (Embed / Webhook)"
-                      >
-                        <Code2 className="w-4 h-4" />
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIntegrationModalPage(page);
+                        setIntegrationTab("live");
+                      }}
+                      className="touch-target px-3.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-[#00215C] border border-blue-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow-2xs"
+                      title="Get Live Page Link & Campaign UTM Builder"
+                    >
+                      <Link2 className="w-3.5 h-3.5 text-[#255CC1]" />
+                      <span>Get Links</span>
+                    </button>
 
                     {canEdit && (
                       <div className="flex items-center gap-1">
                         <button
-                          onClick={() => handleDuplicate(page)}
-                          className="touch-target p-2 text-slate-500 hover:text-slate-800"
-                          title="Duplicate Page"
-                        >
-                          <CopyPlus className="w-4 h-4" />
-                        </button>
-                        <button
                           onClick={() => setEditingPage(page)}
-                          className="touch-target p-2 text-blue-600 hover:text-blue-800"
+                          className="touch-target p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition"
                           title="Edit Page"
                         >
                           <Edit2 className="w-4 h-4" />
                         </button>
                         <button
+                          onClick={() => handleDuplicate(page)}
+                          className="touch-target p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition"
+                          title="Duplicate Page"
+                        >
+                          <CopyPlus className="w-4 h-4" />
+                        </button>
+                        <button
                           onClick={() => setDeleteConfirmPage(page)}
-                          className="touch-target p-2 text-rose-500 hover:text-rose-700"
+                          className="touch-target p-2 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition"
                           title="Delete Page"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -701,13 +716,13 @@ export default function PagesManagementPage() {
             })}
           </div>
 
-          {/* DESKTOP VIEW (>= 768px): Full Data Table */}
+          {/* DESKTOP VIEW (>= 768px): Clean SaaS Data Table */}
           <div className="hidden md:block bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs sm:text-sm">
                 <thead>
-                  <tr className="bg-slate-50/75 border-b border-slate-200 text-slate-400 text-[11px] font-bold uppercase tracking-wider">
-                    <th className="py-3 px-3 w-10 text-center">
+                  <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-500 text-[11px] font-bold uppercase tracking-wider">
+                    <th className="py-3.5 px-3 w-10 text-center">
                       <input
                         type="checkbox"
                         aria-label="Select all pages"
@@ -719,26 +734,26 @@ export default function PagesManagementPage() {
                         className="w-4 h-4 rounded border-slate-300 text-[#00215C] focus:ring-[#255CC1]"
                       />
                     </th>
-                    <th className="py-3 px-4">Page Details</th>
-                    <th className="py-3 px-4">Type</th>
-                    <th className="py-3 px-4">Status & Live Toggle</th>
-                    <th className="py-3 px-4 text-right">Leads</th>
-                    <th className="py-3 px-4 text-right">Conversion</th>
-                    <th className="py-3 px-4 text-right">Actions</th>
+                    <th className="py-3.5 px-4">Page</th>
+                    <th className="py-3.5 px-4">Status</th>
+                    <th className="py-3.5 px-4 text-center">Leads</th>
+                    <th className="py-3.5 px-4 text-center">Conversion Rate</th>
+                    <th className="py-3.5 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredPages.map((page) => {
                     const isLive = page.status === "live";
+                    const displayName = cleanPageName(page.name);
 
                     return (
                       <tr
                         key={page.id}
-                        className={`hover:bg-slate-50/60 transition-colors group ${
+                        className={`hover:bg-slate-50/70 transition-colors group ${
                           selectedPageIds.includes(page.id) ? "bg-blue-50/40" : ""
                         }`}
                       >
-                        {/* Checkbox */}
+                        {/* 1. Checkbox */}
                         <td className="py-3.5 px-3 text-center">
                           <input
                             type="checkbox"
@@ -749,17 +764,19 @@ export default function PagesManagementPage() {
                           />
                         </td>
 
-                        {/* Page Details */}
-                        <td className="py-3.5 px-4 max-w-xs">
-                          <div className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors">
-                            {page.name}
+                        {/* 2. Page & Route (Clean name without capsule) */}
+                        <td className="py-3.5 px-4">
+                          <div className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors text-sm">
+                            {displayName}
                           </div>
-                          <div className="flex items-center gap-1.5 text-xs mt-0.5">
-                            <span className="font-mono text-slate-500">/{page.slug}</span>
+                          <div className="flex items-center gap-1.5 text-xs mt-1">
+                            <span className="font-mono text-blue-700 bg-blue-50/70 px-2 py-0.5 rounded border border-blue-100 text-[11px] font-semibold">
+                              /p/{page.slug}
+                            </span>
                             <button
-                              onClick={() => handleCopy(page.slug, `slug-${page.id}`)}
-                              className="text-slate-400 hover:text-slate-700"
-                              title="Copy slug"
+                              onClick={() => handleCopy(`${origin}/p/${page.slug}`, `slug-${page.id}`)}
+                              className="p-1 text-slate-400 hover:text-slate-700 rounded transition"
+                              title="Copy live page URL"
                             >
                               {copiedId === `slug-${page.id}` ? (
                                 <Check className="w-3.5 h-3.5 text-emerald-600" />
@@ -771,77 +788,70 @@ export default function PagesManagementPage() {
                               href={page.page_url || `/p/${page.slug}`}
                               target="_blank"
                               rel="noreferrer"
-                              className="text-slate-400 hover:text-blue-600 ml-1"
-                              title="Open Live Assessment"
+                              className="p-1 text-slate-400 hover:text-blue-600 rounded transition"
+                              title="Open live page in new tab"
                             >
                               <ExternalLink className="w-3.5 h-3.5" />
                             </a>
                           </div>
                         </td>
 
-                        {/* Page Type */}
-                        <td className="py-3.5 px-4">
-                          <PageTypeBadge type={page.page_type} />
-                        </td>
-
-                        {/* Status & Live Toggle */}
-                        <td className="py-3.5 px-4">
-                          <div className="flex items-center gap-2.5">
-                            <StatusBadge status={page.status} />
+                        {/* 3. Single Interactive Status */}
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          {canEdit ? (
                             <button
                               type="button"
-                              onClick={() => {
-                                setSocialModalPage(page);
-                                setSocialKeyword(page.keyword || "");
-                              }}
-                              className="p-1.5 text-slate-400 hover:text-[#255CC1] hover:bg-blue-50 rounded transition-colors"
-                              title="Generate ManyChat / Social DM Link"
+                              onClick={() => handleToggleLive(page)}
+                              className={`group/status inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border transition shadow-2xs ${
+                                isLive
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200/90 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200"
+                                  : page.status === "draft"
+                                  ? "bg-amber-50 text-amber-700 border-amber-200/90 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200"
+                                  : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200"
+                              }`}
+                              title={
+                                isLive
+                                  ? "Status: Live (Click to pause page)"
+                                  : page.status === "draft"
+                                  ? "Status: Draft (Click to publish live)"
+                                  : "Status: Paused (Click to make live)"
+                              }
                             >
-                              <Share2 className="w-4 h-4" />
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => setIntegrationModalPage(page)}
-                              className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
-                              title="Lead Capture Setup (Embed / Webhook)"
-                            >
-                              <Code2 className="w-4 h-4" />
-                            </button>
-
-                            {canEdit && (
-                              <button
-                                onClick={() => handleToggleLive(page)}
-                                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                              <span
+                                className={`w-2 h-2 rounded-full transition-all ${
                                   isLive
-                                    ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200"
-                                    : "bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200"
+                                    ? "bg-emerald-500 animate-pulse group-hover/status:bg-rose-500"
+                                    : page.status === "draft"
+                                    ? "bg-amber-500 group-hover/status:bg-emerald-500"
+                                    : "bg-slate-400 group-hover/status:bg-emerald-500"
                                 }`}
-                                title={isLive ? "Click to Pause" : "Click to Make Live"}
-                              >
-                                <span
-                                  className={`w-1.5 h-1.5 rounded-full ${
-                                    isLive ? "bg-emerald-500 animate-pulse" : "bg-slate-400"
-                                  }`}
-                                />
-                                <span>{isLive ? "Live" : "Unlive"}</span>
-                              </button>
-                            )}
-                          </div>
+                              />
+                              <span className="capitalize">
+                                {page.status}
+                              </span>
+                            </button>
+                          ) : (
+                            <StatusBadge status={page.status} />
+                          )}
                         </td>
 
-                        {/* Leads */}
-                        <td className="py-3.5 px-4 text-right font-bold text-slate-800">
-                          {formatNumber(page.leads_count)}
+                        {/* 4. Leads Captured */}
+                        <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                          <span className="font-extrabold text-slate-900 text-sm font-mono">
+                            {formatNumber(page.leads_count)}
+                          </span>
+                          <span className="text-[11px] text-slate-400 font-medium ml-1">leads</span>
                         </td>
 
-                        {/* Conversion % */}
-                        <td className="py-3.5 px-4 text-right font-black text-blue-600">
-                          {formatPercentage(page.conversion_percentage)}
+                        {/* 5. Conversion Rate */}
+                        <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                          <span className="font-extrabold text-emerald-600 text-xs font-mono bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 rounded-lg inline-block">
+                            {formatPercentage(page.conversion_percentage)}
+                          </span>
                         </td>
 
-                        {/* Action Buttons */}
-                        <td className="py-3.5 px-4 text-right">
+                        {/* 5. Unified Actions */}
+                        <td className="py-3.5 px-4 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end gap-1.5">
                             <button
                               type="button"
@@ -849,71 +859,37 @@ export default function PagesManagementPage() {
                                 setIntegrationModalPage(page);
                                 setIntegrationTab("live");
                               }}
-                              className="px-2.5 py-1 text-xs font-bold text-[#00215C] bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg flex items-center gap-1 transition"
-                              title="Get Live Page Link, ManyChat URL & Embed Code"
+                              className="px-3 py-1.5 text-xs font-bold text-[#00215C] bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl flex items-center gap-1.5 transition shadow-2xs"
+                              title="Get Live Page Link & Campaign UTM Builder"
                             >
                               <Link2 className="w-3.5 h-3.5 text-[#255CC1]" />
                               <span>Get Links</span>
                             </button>
 
-                            <button
-                              onClick={() => handleCopy(page.page_key, `key-${page.id}`)}
-                              className="px-2 py-1 text-xs font-mono font-medium text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded transition-colors flex items-center gap-1"
-                              title="Copy Page Key"
-                            >
-                              {copiedId === `key-${page.id}` ? (
-                                <Check className="w-3.5 h-3.5 text-emerald-600" />
-                              ) : (
-                                <Copy className="w-3.5 h-3.5" />
-                              )}
-                              <span>Key</span>
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSocialModalPage(page);
-                                setSocialKeyword(page.keyword || "");
-                              }}
-                              className="p-1.5 text-slate-400 hover:text-[#255CC1] hover:bg-blue-50 rounded transition-colors"
-                              title="Generate ManyChat / Social DM Link"
-                            >
-                              <Share2 className="w-4 h-4" />
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => setIntegrationModalPage(page)}
-                              className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
-                              title="Lead Capture Setup (Embed / Webhook)"
-                            >
-                              <Code2 className="w-4 h-4" />
-                            </button>
-
                             {canEdit && (
-                              <>
+                              <div className="flex items-center gap-1 pl-1 border-l border-slate-200">
+                                <button
+                                  onClick={() => setEditingPage(page)}
+                                  className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                                  title="Edit page settings"
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </button>
                                 <button
                                   onClick={() => handleDuplicate(page)}
-                                  className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded transition-colors"
+                                  className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition"
                                   title="Duplicate page"
                                 >
                                   <CopyPlus className="w-4 h-4" />
                                 </button>
                                 <button
-                                  onClick={() => setEditingPage(page)}
-                                  className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                                  title="Edit page"
-                                >
-                                  <Edit2 className="w-4 h-4" />
-                                </button>
-                                <button
                                   onClick={() => setDeleteConfirmPage(page)}
-                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
                                   title="Delete page"
                                 >
                                   <Trash2 className="w-4 h-4" />
                                 </button>
-                              </>
+                              </div>
                             )}
                           </div>
                         </td>
@@ -1199,110 +1175,6 @@ export default function PagesManagementPage() {
         </Modal>
       )}
 
-      {/* 7. Confirm Delete Modal */}
-      {/* 8. ManyChat / Social DM Tracking Link Modal */}
-      {socialModalPage && (
-        <Modal
-          isOpen={true}
-          onClose={() => setSocialModalPage(null)}
-          title="Social DM / ManyChat Campaign Link"
-          description={`Generate a tracked link for "${socialModalPage.name}" with auto-tagging for leads.`}
-          maxWidth="md"
-        >
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                  Social Channel
-                </label>
-                <select
-                  value={socialPlatform}
-                  onChange={(e) => setSocialPlatform(e.target.value)}
-                  className="w-full text-xs rounded-xl border border-slate-200 bg-slate-50 p-2.5 focus:outline-none focus:border-[#255CC1]"
-                >
-                  <option value="ig_dm">Instagram DM (ManyChat)</option>
-                  <option value="ig_bio">Instagram Bio</option>
-                  <option value="ig_story">Instagram Story</option>
-                  <option value="linkedin">LinkedIn Post</option>
-                  <option value="youtube">YouTube Shorts</option>
-                  <option value="wa_broadcast">WhatsApp Broadcast</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                  Trigger Keyword (CTA)
-                </label>
-                <input
-                  type="text"
-                  value={socialKeyword}
-                  onChange={(e) => setSocialKeyword(e.target.value)}
-                  placeholder="e.g. GERMANY"
-                  className="w-full text-xs rounded-xl border border-slate-200 bg-slate-50 p-2.5 font-bold uppercase focus:outline-none focus:border-[#255CC1]"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                Post / Reel Identifier
-              </label>
-              <input
-                type="text"
-                value={socialPostId}
-                onChange={(e) => setSocialPostId(e.target.value)}
-                placeholder="e.g. reel_march_10"
-                className="w-full text-xs rounded-xl border border-slate-200 bg-slate-50 p-2.5 focus:outline-none focus:border-[#255CC1]"
-              />
-            </div>
-
-            {/* Generated URL */}
-            <div className="pt-2">
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-700 mb-1">
-                Ready-to-Paste ManyChat URL
-              </label>
-              {(() => {
-                const origin = typeof window !== 'undefined' ? window.location.origin : '';
-                const url = `${origin}/p/${socialModalPage.slug}?src=${socialPlatform}&kw=${encodeURIComponent(
-                  socialKeyword || 'GENERAL'
-                )}&post_id=${encodeURIComponent(socialPostId || 'post_1')}`;
-                return (
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      readOnly
-                      value={url}
-                      className="flex-1 px-3 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs font-mono select-all focus:outline-none text-[#00215C]"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        navigator.clipboard.writeText(url);
-                        setCopiedSocial(true);
-                        setTimeout(() => setCopiedSocial(false), 2000);
-                      }}
-                      className="px-3 py-2 rounded-xl bg-[#00215C] text-white text-xs font-bold hover:bg-[#255CC1] transition flex items-center gap-1.5 shadow-xs"
-                    >
-                      {copiedSocial ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                      <span>Copy</span>
-                    </button>
-                  </div>
-                );
-              })()}
-            </div>
-
-            <div className="flex justify-end pt-2">
-              <button
-                type="button"
-                onClick={() => setSocialModalPage(null)}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
       {/* 5. Lead Capture & External Integration Setup Modal */}
       {integrationModalPage && (
         <Modal
@@ -1338,8 +1210,8 @@ export default function PagesManagementPage() {
                 phone: "{{phone}}",
                 name: "{{name}}",
                 email: "{{email}}",
-                source: "ig_dm",
-                keyword: integrationModalPage.keyword || "GERMANY",
+                source: "manychat",
+                keyword: integrationModalPage.keyword || "DIRECT",
                 consent: true,
               },
               null,
@@ -1353,8 +1225,7 @@ export default function PagesManagementPage() {
     "phone": "+919876543210",
     "name": "Applicant Name",
     "email": "applicant@gmail.com",
-    "source": "ig_dm",
-    "keyword": "${integrationModalPage.keyword || 'GERMANY'}",
+    "source": "direct",
     "consent": true
   }'`;
 
@@ -1411,27 +1282,33 @@ export default function PagesManagementPage() {
                 {/* Tab 0: Live & Social Links */}
                 {integrationTab === "live" && (
                   <div className="space-y-4">
-                    {/* Live Public URL */}
-                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5">
+                    {/* Live Public Direct URL */}
+                    <div className="p-4 bg-slate-50 border border-slate-200/90 rounded-2xl space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
-                          Live Public Page URL
-                        </span>
-                        <span className="text-[9px] font-bold uppercase bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded">
-                          Production Live
+                        <div className="flex items-center gap-2">
+                          <Globe className="w-4 h-4 text-blue-600" />
+                          <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                            Direct Public Page URL (Default)
+                          </span>
+                        </div>
+                        <span className="text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-200">
+                          Direct Link &bull; Live
                         </span>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <p className="text-xs text-slate-500">
+                        Default clean link with zero tracking parameters. Inbound visitors will automatically be recorded with source: <span className="font-mono font-bold text-slate-700">direct</span>.
+                      </p>
+                      <div className="flex items-center gap-2 pt-1">
                         <input
                           type="text"
                           readOnly
                           value={`${origin}/p/${integrationModalPage.slug}`}
-                          className="w-full bg-white px-3 py-2 border border-slate-200 rounded-lg text-xs font-mono text-slate-800 select-all"
+                          className="w-full bg-white px-3 py-2 border border-slate-200 rounded-xl text-xs font-mono text-slate-800 select-all"
                         />
                         <button
                           type="button"
                           onClick={() => handleCopy(`${origin}/p/${integrationModalPage.slug}`, "live-url")}
-                          className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 transition flex-shrink-0"
+                          className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition flex-shrink-0"
                         >
                           {copiedId === "live-url" ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                           <span>{copiedId === "live-url" ? "Copied" : "Copy"}</span>
@@ -1440,7 +1317,7 @@ export default function PagesManagementPage() {
                           href={`${origin}/p/${integrationModalPage.slug}`}
                           target="_blank"
                           rel="noreferrer"
-                          className="p-2 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg transition flex-shrink-0"
+                          className="p-2 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl transition flex-shrink-0"
                           title="Open live assessment in new tab"
                         >
                           <ExternalLink className="w-4 h-4" />
@@ -1448,31 +1325,202 @@ export default function PagesManagementPage() {
                       </div>
                     </div>
 
-                    {/* Social DM Link Builder */}
-                    <div className="p-3.5 bg-blue-50/70 border border-blue-200 rounded-xl space-y-2.5">
-                      <div className="flex items-center justify-between text-[#00215C]">
-                        <span className="text-xs font-bold uppercase tracking-wider">
-                          Social DM / ManyChat Campaign Link
-                        </span>
+                    {/* Campaign UTM Builder Feature Card */}
+                    <div className="p-4 bg-gradient-to-br from-blue-50/70 via-indigo-50/40 to-white border border-blue-200 rounded-2xl space-y-3.5 shadow-2xs">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Sparkles className="w-4 h-4 text-[#255CC1]" />
+                          <h4 className="font-bold text-xs uppercase tracking-wider text-[#00215C]">
+                            Campaign UTM Builder (Feature)
+                          </h4>
+                        </div>
                         <span className="text-[10px] font-bold text-blue-700 bg-white px-2 py-0.5 rounded-full border border-blue-200">
-                          Attribution Tracked
+                          Optional Tracking
                         </span>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          readOnly
-                          value={`${origin}/p/${integrationModalPage.slug}?src=ig_dm&kw=${encodeURIComponent(socialKeyword || integrationModalPage.keyword || 'GENERAL')}&post_id=reel_101`}
-                          className="w-full bg-white px-3 py-2 border border-blue-200 rounded-lg text-xs font-mono text-blue-900 select-all"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => handleCopy(`${origin}/p/${integrationModalPage.slug}?src=ig_dm&kw=${encodeURIComponent(socialKeyword || integrationModalPage.keyword || 'GENERAL')}&post_id=reel_101`, "social-tracked-url")}
-                          className="px-3 py-2 bg-[#00215C] hover:bg-[#255CC1] text-white text-xs font-bold rounded-lg flex items-center gap-1.5 transition flex-shrink-0"
-                        >
-                          {copiedId === "social-tracked-url" ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                          <span>{copiedId === "social-tracked-url" ? "Copied" : "Copy"}</span>
-                        </button>
+                      <p className="text-xs text-slate-600">
+                        Running an Instagram ad, bio link, WhatsApp blast, or email newsletter? Tag your link with custom UTM parameters below to identify marketing sources in your Leads CRM.
+                      </p>
+
+                      {/* Source Quick-Selector Chips */}
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                          1. Quick Source Preset
+                        </label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {[
+                            { id: "instagram", label: "Instagram" },
+                            { id: "facebook", label: "Facebook" },
+                            { id: "whatsapp", label: "WhatsApp" },
+                            { id: "youtube", label: "YouTube" },
+                            { id: "linkedin", label: "LinkedIn" },
+                            { id: "email", label: "Email" },
+                            { id: "google", label: "Google" },
+                          ].map((src) => {
+                            const isSelected = utmSource.toLowerCase() === src.id;
+                            return (
+                              <button
+                                key={src.id}
+                                type="button"
+                                onClick={() => setUtmSource(isSelected ? "" : src.id)}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition ${
+                                  isSelected
+                                    ? "bg-[#00215C] text-white border-[#00215C] shadow-2xs"
+                                    : "bg-white text-slate-700 border-slate-200 hover:border-blue-300 hover:bg-blue-50/50"
+                                }`}
+                              >
+                                {src.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Medium Quick-Selector Chips */}
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                          2. Quick Medium Preset
+                        </label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {[
+                            { id: "dm", label: "DM / Chat" },
+                            { id: "bio", label: "Bio Link" },
+                            { id: "story", label: "Story" },
+                            { id: "post", label: "Post / Reel" },
+                            { id: "ad", label: "Paid Ad" },
+                            { id: "newsletter", label: "Newsletter" },
+                          ].map((med) => {
+                            const isSelected = utmMedium.toLowerCase() === med.id;
+                            return (
+                              <button
+                                key={med.id}
+                                type="button"
+                                onClick={() => setUtmMedium(isSelected ? "" : med.id)}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition ${
+                                  isSelected
+                                    ? "bg-[#255CC1] text-white border-[#255CC1] shadow-2xs"
+                                    : "bg-white text-slate-700 border-slate-200 hover:border-blue-300 hover:bg-blue-50/50"
+                                }`}
+                              >
+                                {med.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Inputs Grid */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1 text-xs">
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                            utm_source
+                          </label>
+                          <input
+                            type="text"
+                            value={utmSource}
+                            onChange={(e) => setUtmSource(e.target.value)}
+                            placeholder="e.g. instagram"
+                            className="w-full p-2 bg-white border border-slate-200 rounded-lg font-mono text-xs focus:outline-none focus:border-blue-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                            utm_medium
+                          </label>
+                          <input
+                            type="text"
+                            value={utmMedium}
+                            onChange={(e) => setUtmMedium(e.target.value)}
+                            placeholder="e.g. bio, dm, ad"
+                            className="w-full p-2 bg-white border border-slate-200 rounded-lg font-mono text-xs focus:outline-none focus:border-blue-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                            utm_campaign
+                          </label>
+                          <input
+                            type="text"
+                            value={utmCampaign}
+                            onChange={(e) => setUtmCampaign(e.target.value)}
+                            placeholder="e.g. fall_launch_2026"
+                            className="w-full p-2 bg-white border border-slate-200 rounded-lg font-mono text-xs focus:outline-none focus:border-blue-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                            utm_term (Keyword)
+                          </label>
+                          <input
+                            type="text"
+                            value={utmTerm}
+                            onChange={(e) => setUtmTerm(e.target.value)}
+                            placeholder="e.g. express_entry"
+                            className="w-full p-2 bg-white border border-slate-200 rounded-lg font-mono text-xs focus:outline-none focus:border-blue-500"
+                          />
+                        </div>
+
+                        <div className="sm:col-span-2">
+                          <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                            utm_content (Ad / Reel CTA)
+                          </label>
+                          <input
+                            type="text"
+                            value={utmContent}
+                            onChange={(e) => setUtmContent(e.target.value)}
+                            placeholder="e.g. hero_banner_v2, reel_nov5"
+                            className="w-full p-2 bg-white border border-slate-200 rounded-lg font-mono text-xs focus:outline-none focus:border-blue-500"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Generated Tagged URL Display */}
+                      <div className="pt-1.5 space-y-2">
+                        <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                          <span>Generated Campaign Link</span>
+                          {(utmSource || utmMedium || utmCampaign || utmTerm || utmContent) && (
+                            <button
+                              type="button"
+                              onClick={handleResetUtm}
+                              className="text-rose-600 hover:text-rose-800 lowercase font-medium underline"
+                            >
+                              reset to direct
+                            </button>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            readOnly
+                            value={getCustomCampaignUrl(integrationModalPage.slug)}
+                            className="w-full bg-white px-3 py-2 border border-blue-200 rounded-xl text-xs font-mono text-blue-900 select-all"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const campaignUrl = getCustomCampaignUrl(integrationModalPage.slug);
+                              handleCopy(campaignUrl, "campaign-utm-url");
+                            }}
+                            className="px-3.5 py-2 bg-[#00215C] hover:bg-[#255CC1] text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition flex-shrink-0"
+                          >
+                            {copiedId === "campaign-utm-url" ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                            <span>{copiedId === "campaign-utm-url" ? "Copied" : "Copy Campaign Link"}</span>
+                          </button>
+                          {(utmSource || utmMedium || utmCampaign || utmTerm || utmContent) && (
+                            <a
+                              href={getCustomCampaignUrl(integrationModalPage.slug)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="p-2 bg-blue-100/60 text-blue-800 hover:bg-blue-200 rounded-xl transition flex-shrink-0"
+                              title="Test campaign link in new tab"
+                            >
+                              <ExternalLink className="w-4 h-4" />
+                            </a>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>

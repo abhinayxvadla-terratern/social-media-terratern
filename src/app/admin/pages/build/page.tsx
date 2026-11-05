@@ -48,6 +48,11 @@ import {
   Link2,
   Code2,
   Globe,
+  Paperclip,
+  Upload,
+  FileCode,
+  Trash2,
+  X,
 } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 
@@ -58,13 +63,157 @@ interface ConfigSnapshot {
   config: VibePageConfig;
 }
 
-const PRESET_TEMPLATES = [
-  { label: '🇩🇪 Germany Opportunity Card', prompt: 'Germany Opportunity Card Points Calculator' },
-  { label: '🍁 Canada CRS Calculator', prompt: 'Canada Express Entry CRS Points Estimator' },
-  { label: '🇦🇺 Australia 189 Assessment', prompt: 'Australia Subclass 189 Points Assessment' },
-  { label: '📄 2026 Salary Guide PDF', prompt: '2026 PR Salary & NOC Checklist PDF' },
-  { label: '📞 Free Consultation', prompt: 'Free 1-on-1 Immigration Consultation' },
-];
+const BLANK_PAGE_CONFIG: VibePageConfig = {
+  name: 'New Landing Page',
+  page_type: 'custom',
+  headline: 'Transform Social Media Traffic Into High-Intent Consultations',
+  subtitle: 'Prompt our Vibe AI engine or upload code to build bespoke immigration calculators, quizzes, and landing pages with universal lead tracking.',
+  theme_accent: 'blue',
+  questions: [],
+  qualification_threshold: 0,
+  badge_text: 'Live 2026 Assessment',
+  cta_text: 'Claim Strategy Consultation',
+  slug_suggestion: 'global-mobility-assessment',
+  keyword_suggestion: 'CONSULT',
+  custom_html: `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TerraTern Global Mobility | Assessment & Strategy</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Plus Jakarta Sans', sans-serif; }
+  </style>
+</head>
+<body class="bg-gradient-to-b from-slate-50 via-white to-slate-100 min-h-screen text-slate-800 antialiased flex flex-col justify-between">
+  <!-- Navigation Header -->
+  <header class="w-full bg-white/90 backdrop-blur-md border-b border-slate-200/80 sticky top-0 z-30 px-4 sm:px-8 py-3.5 flex items-center justify-between">
+    <div class="flex items-center gap-2.5">
+      <div class="w-8 h-8 rounded-xl bg-[#00215C] text-white font-extrabold text-sm flex items-center justify-center shadow-md">
+        TT
+      </div>
+      <div>
+        <span class="font-extrabold text-sm text-[#00215C] tracking-tight block">TerraTern</span>
+        <span class="text-[10px] text-slate-500 font-medium block leading-none">Global Mobility Counsel</span>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-bold">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+        <span>Admissions Open 2026</span>
+      </span>
+    </div>
+  </header>
+
+  <!-- Main Hero & Lead Capture Section -->
+  <main class="max-w-2xl mx-auto w-full px-4 py-8 sm:py-12 my-auto">
+    <div class="text-center mb-8">
+      <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-[#255CC1] text-xs font-bold mb-3 shadow-sm">
+        <span>✨ AI-Ready Vibe Studio Page</span>
+      </div>
+      <h1 class="text-2xl sm:text-4xl font-black text-[#00215C] tracking-tight leading-tight mb-3">
+        Evaluate Your Global Mobility Pathway
+      </h1>
+      <p class="text-sm sm:text-base text-slate-600 max-w-lg mx-auto leading-relaxed">
+        Get an accurate qualification evaluation for Canada, Germany, Australia, UK, and Dubai PR programs.
+      </p>
+    </div>
+
+    <!-- TerraTern Universal Lead Capture Card -->
+    <div class="bg-white rounded-3xl border border-slate-200/90 shadow-xl shadow-slate-200/60 p-6 sm:p-8">
+      <div class="mb-5 pb-4 border-b border-slate-100 flex items-center justify-between">
+        <div>
+          <h2 class="text-base font-bold text-[#00215C]">Request Immediate Consultation</h2>
+          <p class="text-xs text-slate-500 mt-0.5">Submit your details to connect with a senior licensed advisor.</p>
+        </div>
+        <span class="text-[10px] font-mono font-bold uppercase tracking-wider bg-slate-100 text-slate-600 px-2 py-1 rounded-lg">
+          Zero Spam
+        </span>
+      </div>
+
+      <form id="terrateern-lead-form" class="space-y-4">
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+            Full Name *
+          </label>
+          <input
+            type="text"
+            name="name"
+            required
+            placeholder="e.g. Rahul Sharma"
+            class="w-full px-4 py-3 bg-slate-50/80 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition"
+          />
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+            Mobile Number (India +91) *
+          </label>
+          <input
+            type="tel"
+            name="phone"
+            required
+            placeholder="9876543210"
+            class="w-full px-4 py-3 bg-slate-50/80 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition"
+          />
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+            Email Address *
+          </label>
+          <input
+            type="email"
+            name="email"
+            required
+            placeholder="rahul@example.com"
+            class="w-full px-4 py-3 bg-slate-50/80 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition"
+          />
+        </div>
+
+        <label class="flex items-start gap-2.5 text-xs text-slate-500 pt-1 cursor-pointer">
+          <input type="checkbox" name="consent" checked required class="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
+          <span>I agree to receive my assessment roadmap & strategy consultation via WhatsApp and Email.</span>
+        </label>
+
+        <div class="pt-2">
+          <button
+            type="submit"
+            class="w-full py-3.5 px-6 bg-[#00215C] hover:bg-[#255CC1] active:scale-[0.99] text-white font-bold text-sm rounded-xl transition shadow-lg shadow-blue-900/15 flex items-center justify-center gap-2"
+          >
+            <span>Claim Strategy Consultation & Assessment</span>
+            <span>&rarr;</span>
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Trust Proof Grid -->
+    <div class="mt-8 grid grid-cols-3 gap-3 text-center border-t border-slate-200/80 pt-6 text-xs text-slate-500">
+      <div>
+        <span class="block text-lg font-black text-[#00215C]">5,000+</span>
+        <span class="text-[11px]">Visas Approved</span>
+      </div>
+      <div>
+        <span class="block text-lg font-black text-[#00215C]">98.4%</span>
+        <span class="text-[11px]">Qualification Accuracy</span>
+      </div>
+      <div>
+        <span class="block text-lg font-black text-[#00215C]">Licensed</span>
+        <span class="text-[11px]">MARA & German Counsel</span>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="w-full py-5 text-center text-xs text-slate-400 border-t border-slate-200 bg-white">
+    <p>&copy; 2026 TerraTern Global Mobility. All rights reserved. &bull; <a href="#" class="underline">Privacy Policy</a></p>
+  </footer>
+</body>
+</html>`,
+};
 
 export default function VibeStudioPage() {
   const router = useRouter();
@@ -75,22 +224,17 @@ export default function VibeStudioPage() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Active Draft Config
-  const [config, setConfig] = useState<VibePageConfig>(() => {
-    return generateHeuristicPage('Germany Opportunity Card Points Calculator').config;
-  });
+  const [config, setConfig] = useState<VibePageConfig>(() => BLANK_PAGE_CONFIG);
 
   // Version History / Revert System
-  const [history, setHistory] = useState<ConfigSnapshot[]>(() => {
-    const initial = generateHeuristicPage('Germany Opportunity Card Points Calculator').config;
-    return [
-      {
-        id: 'snap_0',
-        timestamp: 'Initial',
-        description: 'Template: Germany Opportunity Card',
-        config: JSON.parse(JSON.stringify(initial)),
-      },
-    ];
-  });
+  const [history, setHistory] = useState<ConfigSnapshot[]>(() => [
+    {
+      id: 'snap_0',
+      timestamp: 'Initial',
+      description: 'Clean Canvas',
+      config: JSON.parse(JSON.stringify(BLANK_PAGE_CONFIG)),
+    },
+  ]);
   const [historyIndex, setHistoryIndex] = useState(0);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
 
@@ -99,8 +243,8 @@ export default function VibeStudioPage() {
   const [isPromptCollapsed, setIsPromptCollapsed] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
-  // Builder Left Panel Tab: 'ai' | 'editor' | 'code'
-  const [studioTab, setStudioTab] = useState<'ai' | 'editor' | 'code'>('ai');
+  // Builder Left Panel Tab: 'ai' | 'upload' | 'code' | 'editor'
+  const [studioTab, setStudioTab] = useState<'ai' | 'upload' | 'code' | 'editor'>('ai');
 
   // Preview Mode & Simulation Reset
   const [viewDevice, setViewDevice] = useState<'mobile' | 'tablet' | 'desktop'>('mobile');
@@ -112,6 +256,16 @@ export default function VibeStudioPage() {
   const [jsonCode, setJsonCode] = useState(() => JSON.stringify(config, null, 2));
   const [jsonError, setJsonError] = useState<string | null>(null);
 
+  // File Upload State & Ref
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const [attachedFile, setAttachedFile] = useState<{
+    name: string;
+    type: string;
+    size: number;
+    content: string;
+  } | null>(null);
+
   // Prompt & Chat History
   const [promptText, setPromptText] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -122,16 +276,17 @@ export default function VibeStudioPage() {
     {
       role: 'assistant',
       content:
-        'Describe the landing page or quiz you need for your social media campaign, or pick a 1-click template above.',
+        'Welcome to TerraTern Vibe Studio! Describe any landing page, interactive calculator, or qualification portal you want to build. You can also attach files or paste external code.',
       time: 'Just now',
     },
   ]);
 
   const [suggestions, setSuggestions] = useState<string[]>([
-    'Make headline more urgent for 2026 intake',
-    'Add question about German language proficiency',
-    'Change accent color to emerald',
-    'Require 6 points to qualify for job search',
+    'Build an interactive Canada Express Entry CRS Points calculator with interactive sliders',
+    'Create a Dubai 10-Year Golden Visa eligibility assessment with salary & investment checks',
+    'Create a Germany Opportunity Card (§ 20a Chancenkarte) points evaluation portal',
+    'Build a US EB-5 Immigrant Investor high-ticket consultation landing page',
+    'Add WhatsApp floating quick-connect button and 2-step lead capture',
   ]);
 
   // Metadata Settings
@@ -158,15 +313,46 @@ export default function VibeStudioPage() {
     status?: string;
   } | null>(null);
 
-  // Social Link Builder inside Publish Modal
-  const [socialPlatform, setSocialPlatform] = useState('ig_dm');
-  const [campaignKeyword, setCampaignKeyword] = useState('');
-  const [campaignPostId, setCampaignPostId] = useState('reel_101');
+  // Campaign UTM Builder feature state
+  const [utmSource, setUtmSource] = useState('');
+  const [utmMedium, setUtmMedium] = useState('');
+  const [utmCampaign, setUtmCampaign] = useState('');
+  const [utmTerm, setUtmTerm] = useState('');
+  const [utmContent, setUtmContent] = useState('');
   const [copiedLink, setCopiedLink] = useState(false);
-  const [copiedSocialLink, setCopiedSocialLink] = useState(false);
+  const [copiedUtmLink, setCopiedUtmLink] = useState(false);
   const [copiedEmbedScript, setCopiedEmbedScript] = useState(false);
   const [copiedKey, setCopiedKey] = useState(false);
   const [previewCopied, setPreviewCopied] = useState(false);
+
+  const getCustomCampaignUrl = (baseUrl: string) => {
+    try {
+      const url = new URL(baseUrl);
+      if (utmSource.trim()) url.searchParams.set('utm_source', utmSource.trim().toLowerCase());
+      if (utmMedium.trim()) url.searchParams.set('utm_medium', utmMedium.trim().toLowerCase());
+      if (utmCampaign.trim()) url.searchParams.set('utm_campaign', utmCampaign.trim().toLowerCase());
+      if (utmTerm.trim()) url.searchParams.set('utm_term', utmTerm.trim());
+      if (utmContent.trim()) url.searchParams.set('utm_content', utmContent.trim());
+      return url.toString();
+    } catch {
+      const params = new URLSearchParams();
+      if (utmSource.trim()) params.set('utm_source', utmSource.trim().toLowerCase());
+      if (utmMedium.trim()) params.set('utm_medium', utmMedium.trim().toLowerCase());
+      if (utmCampaign.trim()) params.set('utm_campaign', utmCampaign.trim().toLowerCase());
+      if (utmTerm.trim()) params.set('utm_term', utmTerm.trim());
+      if (utmContent.trim()) params.set('utm_content', utmContent.trim());
+      const qs = params.toString();
+      return qs ? `${baseUrl}?${qs}` : baseUrl;
+    }
+  };
+
+  const handleResetUtm = () => {
+    setUtmSource('');
+    setUtmMedium('');
+    setUtmCampaign('');
+    setUtmTerm('');
+    setUtmContent('');
+  };
 
   // Sync JSON & HTML code when config updates
   useEffect(() => {
@@ -207,7 +393,6 @@ export default function VibeStudioPage() {
     }
     if (!customKeyword && config.keyword_suggestion) {
       setCustomKeyword(config.keyword_suggestion);
-      setCampaignKeyword(config.keyword_suggestion);
     }
   }, [config]);
 
@@ -309,57 +494,99 @@ export default function VibeStudioPage() {
     };
   }, [isDragging]);
 
-  // Load a preset template
-  const handleLoadPreset = (prompt: string) => {
-    const fallback = generateHeuristicPage(prompt, config);
-    setConfig(fallback.config);
-    if (fallback.config.slug_suggestion) setCustomSlug(fallback.config.slug_suggestion);
-    if (fallback.config.keyword_suggestion) {
-      setCustomKeyword(fallback.config.keyword_suggestion);
-      setCampaignKeyword(fallback.config.keyword_suggestion);
+  // File Processing (HTML, JSX, TSX, Markdown, Text, PDF, JSON)
+  const processFile = (file: File) => {
+    const reader = new FileReader();
+    const isText =
+      file.type.startsWith('text/') ||
+      /\.(html|htm|jsx|tsx|vue|js|ts|json|txt|md|svg|csv)$/i.test(file.name);
+
+    if (isText) {
+      reader.onload = (e) => {
+        const content = (e.target?.result as string) || '';
+        setAttachedFile({
+          name: file.name,
+          type: file.type || 'text/plain',
+          size: file.size,
+          content,
+        });
+      };
+      reader.readAsText(file);
+    } else {
+      reader.onload = (e) => {
+        const content = (e.target?.result as string) || '';
+        setAttachedFile({
+          name: file.name,
+          type: file.type || 'application/octet-stream',
+          size: file.size,
+          content,
+        });
+      };
+      reader.readAsDataURL(file);
     }
-    setPreviewKey((k) => k + 1);
-    recordSnapshot(fallback.config, `Loaded Template: ${fallback.config.name}`);
-    setChatHistory((prev) => [
-      ...prev,
-      {
-        role: 'assistant',
-        content: `Loaded ${fallback.config.name}. You can customize copy, score points, or prompt modifications.`,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      },
-    ]);
   };
 
-  // Call In-Portal AI Engine
-  const handlePromptSubmit = async (userPrompt: string) => {
-    if (!userPrompt.trim() || isGenerating) return;
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      processFile(file);
+    }
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
+  // Call In-Portal AI Engine (Lovable & Google AI Studio style)
+  const handlePromptSubmit = async (userPrompt: string, fileToAttach = attachedFile) => {
     const trimmed = userPrompt.trim();
+    const effectivePrompt =
+      trimmed ||
+      (fileToAttach
+        ? `Adapt and convert this attached file (${fileToAttach.name}) into a high-converting TerraTern landing page with interactive elements and universal lead capture.`
+        : '');
+
+    if (!effectivePrompt || isGenerating) return;
+
     setIsGenerating(true);
-    setGenerationStep('Analyzing prompt requirements...');
+    setGenerationStep(
+      fileToAttach
+        ? `Processing attached file "${fileToAttach.name}" & requirements...`
+        : 'Analyzing prompt requirements...'
+    );
     setPromptText('');
+
+    const displayContent = fileToAttach
+      ? `[📎 Attached: ${fileToAttach.name} (${(fileToAttach.size / 1024).toFixed(1)} KB)]\n${effectivePrompt}`
+      : effectivePrompt;
 
     const updatedHistory = [
       ...chatHistory,
       {
         role: 'user' as const,
-        content: trimmed,
+        content: displayContent,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       },
     ];
     setChatHistory(updatedHistory);
 
     try {
-      setTimeout(() => setGenerationStep('Compiling points matrix & qualification rules...'), 400);
-      setTimeout(() => setGenerationStep('Rendering interactive simulation tree...'), 900);
+      setTimeout(() => setGenerationStep('Synthesizing bespoke layout & interactive logic...'), 400);
+      setTimeout(() => setGenerationStep('Injecting universal lead attribution & Tailwind styles...'), 900);
 
       const res = await fetch('/api/v1/admin/studio/vibe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prompt: trimmed,
+          prompt: effectivePrompt,
           currentConfig: config,
           history: updatedHistory.map((h) => ({ role: h.role, content: h.content })),
+          attachedFile: fileToAttach
+            ? {
+                name: fileToAttach.name,
+                type: fileToAttach.type,
+                content: fileToAttach.content,
+              }
+            : null,
         }),
       });
 
@@ -367,11 +594,13 @@ export default function VibeStudioPage() {
 
       if (res.ok && data.success && data.config) {
         setConfig(data.config);
-        recordSnapshot(data.config, `AI Prompt: "${trimmed.substring(0, 32)}${trimmed.length > 32 ? '...' : ''}"`);
+        recordSnapshot(
+          data.config,
+          `AI Prompt: "${effectivePrompt.substring(0, 32)}${effectivePrompt.length > 32 ? '...' : ''}"`
+        );
         if (data.config.slug_suggestion) setCustomSlug(data.config.slug_suggestion);
         if (data.config.keyword_suggestion) {
           setCustomKeyword(data.config.keyword_suggestion);
-          setCampaignKeyword(data.config.keyword_suggestion);
         }
         if (data.suggestions) setSuggestions(data.suggestions);
         setPreviewKey((k) => k + 1);
@@ -380,14 +609,15 @@ export default function VibeStudioPage() {
           ...prev,
           {
             role: 'assistant',
-            content: data.message || 'Page updated according to your prompt. Live preview updated.',
+            content: data.message || 'Page created and updated according to your prompt. Live preview updated.',
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           },
         ]);
+        setAttachedFile(null);
       } else {
-        const fallback = generateHeuristicPage(trimmed, config);
+        const fallback = generateHeuristicPage(effectivePrompt, config);
         setConfig(fallback.config);
-        recordSnapshot(fallback.config, `AI Prompt: "${trimmed.substring(0, 32)}"`);
+        recordSnapshot(fallback.config, `AI Prompt: "${effectivePrompt.substring(0, 32)}"`);
         setPreviewKey((k) => k + 1);
         setChatHistory((prev) => [
           ...prev,
@@ -397,11 +627,12 @@ export default function VibeStudioPage() {
             time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           },
         ]);
+        setAttachedFile(null);
       }
     } catch {
-      const fallback = generateHeuristicPage(trimmed, config);
+      const fallback = generateHeuristicPage(effectivePrompt, config);
       setConfig(fallback.config);
-      recordSnapshot(fallback.config, `AI Prompt: "${trimmed.substring(0, 32)}"`);
+      recordSnapshot(fallback.config, `AI Prompt: "${effectivePrompt.substring(0, 32)}"`);
       setPreviewKey((k) => k + 1);
       setChatHistory((prev) => [
         ...prev,
@@ -411,6 +642,7 @@ export default function VibeStudioPage() {
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         },
       ]);
+      setAttachedFile(null);
     } finally {
       setIsGenerating(false);
       setGenerationStep(null);
@@ -622,9 +854,6 @@ export default function VibeStudioPage() {
   const effectiveSlug = publishedPage?.slug || customSlug || config.slug_suggestion || 'assessment-demo';
   const effectiveKey = publishedPage?.page_key || 'PAGE_KEY_LIVE';
   const baseLiveUrl = publishedPage?.live_url || `${originUrl}/p/${effectiveSlug}`;
-  const socialTrackedUrl = `${baseLiveUrl}?src=${socialPlatform}&kw=${encodeURIComponent(
-    campaignKeyword || customKeyword || config.keyword_suggestion || 'GENERAL'
-  )}&post_id=${encodeURIComponent(campaignPostId || 'reel_101')}`;
   const embedScript = publishedPage?.embed_script || `<script src="${originUrl}/connect.js" data-page-key="${effectiveKey}" async></script>`;
 
   return (
@@ -890,66 +1119,71 @@ export default function VibeStudioPage() {
             style={{ width: `${promptWidth}%` }}
             className="h-full bg-white border-r border-slate-200 flex flex-col flex-shrink-0 z-10 overflow-hidden transition-[width] duration-75 min-w-[280px] max-w-[85vw]"
           >
-            {/* Top Template Presets Bar */}
-            <div className="p-2 sm:p-2.5 bg-slate-50/90 border-b border-slate-200/80 flex items-center gap-1.5 overflow-x-auto no-scrollbar flex-shrink-0">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 pl-1 flex-shrink-0">
-                Templates:
-              </span>
-              {PRESET_TEMPLATES.map((tmpl) => (
-                <button
-                  key={tmpl.label}
-                  type="button"
-                  onClick={() => handleLoadPreset(tmpl.prompt)}
-                  className="px-2.5 py-1 rounded-lg bg-white hover:bg-blue-50 border border-slate-200 hover:border-blue-300 text-[11px] font-semibold text-slate-700 hover:text-[#00215C] whitespace-nowrap transition flex-shrink-0 shadow-2xs"
-                >
-                  {tmpl.label}
-                </button>
-              ))}
-            </div>
+            {/* Hidden File Input for Paperclip and Drag & Drop */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileInputChange}
+              accept=".html,.htm,.jsx,.tsx,.vue,.js,.ts,.json,.txt,.md,.pdf,.docx,.png,.jpg,.jpeg"
+              className="hidden"
+            />
 
-            {/* Studio Mode Tabs (AI Prompt vs Visual Editor vs Code) */}
-            <div className="flex border-b border-slate-200 bg-white px-3 pt-2 gap-2 flex-shrink-0">
+            {/* Studio Mode Tabs (AI Prompter vs Upload/Import vs Code vs Visual Settings) */}
+            <div className="flex border-b border-slate-200 bg-white px-2 pt-2 gap-1 flex-shrink-0 overflow-x-auto no-scrollbar">
               <button
                 type="button"
                 onClick={() => setStudioTab('ai')}
-                className={`pb-2.5 px-3 text-xs font-bold flex items-center gap-1.5 border-b-2 transition ${
+                className={`pb-2.5 px-2.5 text-xs font-bold flex items-center gap-1.5 border-b-2 transition whitespace-nowrap ${
                   studioTab === 'ai'
                     ? 'border-[#255CC1] text-[#00215C]'
                     : 'border-transparent text-slate-400 hover:text-slate-700'
                 }`}
               >
-                <Bot className="w-3.5 h-3.5" />
-                <span>AI Prompt</span>
+                <Sparkles className="w-3.5 h-3.5 text-[#F1C819]" />
+                <span>AI Prompter</span>
               </button>
 
               <button
                 type="button"
-                onClick={() => setStudioTab('editor')}
-                className={`pb-2.5 px-3 text-xs font-bold flex items-center gap-1.5 border-b-2 transition ${
-                  studioTab === 'editor'
+                onClick={() => setStudioTab('upload')}
+                className={`pb-2.5 px-2.5 text-xs font-bold flex items-center gap-1.5 border-b-2 transition whitespace-nowrap ${
+                  studioTab === 'upload'
                     ? 'border-[#255CC1] text-[#00215C]'
                     : 'border-transparent text-slate-400 hover:text-slate-700'
                 }`}
               >
-                <SlidersHorizontal className="w-3.5 h-3.5" />
-                <span>Visual Editor</span>
+                <Upload className="w-3.5 h-3.5 text-indigo-500" />
+                <span>Upload & Import</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setStudioTab('code')}
-                className={`pb-2.5 px-3 text-xs font-bold flex items-center gap-1.5 border-b-2 transition ${
+                className={`pb-2.5 px-2.5 text-xs font-bold flex items-center gap-1.5 border-b-2 transition whitespace-nowrap ${
                   studioTab === 'code'
                     ? 'border-[#255CC1] text-[#00215C]'
                     : 'border-transparent text-slate-400 hover:text-slate-700'
                 }`}
               >
-                <Code className="w-3.5 h-3.5" />
-                <span>Custom Code / Paste</span>
+                <Code className="w-3.5 h-3.5 text-emerald-500" />
+                <span>Code & Paste</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setStudioTab('editor')}
+                className={`pb-2.5 px-2.5 text-xs font-bold flex items-center gap-1.5 border-b-2 transition whitespace-nowrap ${
+                  studioTab === 'editor'
+                    ? 'border-[#255CC1] text-[#00215C]'
+                    : 'border-transparent text-slate-400 hover:text-slate-700'
+                }`}
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5 text-slate-500" />
+                <span>Visual Settings</span>
               </button>
 
               {/* Quick Revert / Undo Icon button on right of tabs */}
-              <div className="ml-auto flex items-center gap-1 pb-2">
+              <div className="ml-auto flex items-center gap-1 pb-2 pl-2">
                 <button
                   type="button"
                   onClick={handleUndo}
@@ -963,7 +1197,7 @@ export default function VibeStudioPage() {
                   type="button"
                   onClick={() => setIsHistoryModalOpen(true)}
                   className="p-1 text-slate-400 hover:text-blue-600"
-                  title="Revert / History"
+                  title="Revert / History Snapshots"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                 </button>
@@ -998,7 +1232,7 @@ export default function VibeStudioPage() {
                       <div
                         className={`max-w-[90%] p-3 rounded-2xl text-xs sm:text-sm leading-relaxed ${
                           msg.role === 'user'
-                            ? 'bg-[#00215C] text-white rounded-br-xs'
+                            ? 'bg-[#00215C] text-white rounded-br-xs whitespace-pre-wrap'
                             : 'bg-white border border-slate-200/90 text-slate-800 shadow-2xs rounded-bl-xs'
                         }`}
                       >
@@ -1041,6 +1275,29 @@ export default function VibeStudioPage() {
 
                 {/* Sticky Prompt Input Box */}
                 <div className="p-3 bg-white border-t border-slate-200 flex-shrink-0">
+                  {/* File Attachment Pill */}
+                  {attachedFile && (
+                    <div className="mb-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-xl flex items-center justify-between text-xs animate-in fade-in">
+                      <div className="flex items-center gap-2 truncate">
+                        <Paperclip className="w-3.5 h-3.5 text-[#255CC1] flex-shrink-0" />
+                        <span className="font-bold text-[#00215C] truncate max-w-[200px] sm:max-w-xs">
+                          {attachedFile.name}
+                        </span>
+                        <span className="text-[10px] text-slate-500 font-mono">
+                          ({(attachedFile.size / 1024).toFixed(1)} KB)
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setAttachedFile(null)}
+                        className="p-1 text-slate-400 hover:text-rose-600 rounded-md transition"
+                        title="Remove attached file"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+
                   <form
                     onSubmit={(e) => {
                       e.preventDefault();
@@ -1048,17 +1305,29 @@ export default function VibeStudioPage() {
                     }}
                     className="relative flex items-center"
                   >
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="absolute left-2.5 p-1.5 text-slate-400 hover:text-[#00215C] hover:bg-slate-200/60 rounded-lg transition"
+                      title="Attach a code, document, or design brief"
+                    >
+                      <Paperclip className="w-4 h-4" />
+                    </button>
                     <input
                       type="text"
                       value={promptText}
                       onChange={(e) => setPromptText(e.target.value)}
-                      placeholder="Ask Vibe Agent to tweak headline, questions, points..."
+                      placeholder={
+                        attachedFile
+                          ? `Tell AI how to adapt ${attachedFile.name}...`
+                          : "Describe the page, calculator, or portal you want to build..."
+                      }
                       disabled={isGenerating}
-                      className="w-full pl-3.5 pr-20 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition"
+                      className="w-full pl-10 pr-20 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition"
                     />
                     <button
                       type="submit"
-                      disabled={isGenerating || !promptText.trim()}
+                      disabled={isGenerating || (!promptText.trim() && !attachedFile)}
                       className="absolute right-1.5 px-3 py-1.5 bg-[#00215C] hover:bg-[#255CC1] disabled:opacity-40 text-white font-bold text-xs rounded-lg transition flex items-center gap-1 shadow-2xs"
                     >
                       <Send className="w-3 h-3" />
@@ -1067,6 +1336,147 @@ export default function VibeStudioPage() {
                   </form>
                   <p className="text-[10px] text-slate-400 mt-1 pl-1">
                     Press <strong>Enter</strong> to send &bull; <strong>Ctrl+Z</strong> to undo
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* TAB CONTENT 2: Upload & File Ingestion Studio */}
+            {studioTab === 'upload' && (
+              <div className="flex-1 flex flex-col p-4 overflow-y-auto bg-slate-50/50 space-y-4">
+                {/* Drag and Drop Zone */}
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setIsDraggingFile(true);
+                  }}
+                  onDragLeave={() => setIsDraggingFile(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDraggingFile(false);
+                    const file = e.dataTransfer.files?.[0];
+                    if (file) processFile(file);
+                  }}
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`border-2 border-dashed rounded-2xl p-6 sm:p-8 text-center cursor-pointer transition flex flex-col items-center justify-center gap-3 ${
+                    isDraggingFile
+                      ? 'border-blue-500 bg-blue-50/80 scale-[1.01]'
+                      : 'border-slate-300 hover:border-blue-400 bg-white hover:bg-slate-50/70 shadow-2xs'
+                  }`}
+                >
+                  <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-200 text-[#255CC1] flex items-center justify-center shadow-xs">
+                    <Upload className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-[#00215C]">
+                      Drop your document or code file here
+                    </h4>
+                    <p className="text-xs text-slate-500 mt-1 max-w-sm">
+                      Supports <span className="font-semibold text-slate-700">.html, .jsx, .tsx, .json, .pdf, .docx, .txt, .md, images</span>
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="px-4 py-2 bg-slate-100 hover:bg-[#00215C] text-slate-700 hover:text-white rounded-xl text-xs font-bold transition shadow-2xs"
+                  >
+                    Browse Files from Computer
+                  </button>
+                </div>
+
+                {/* Attached File Card if present */}
+                {attachedFile && (
+                  <div className="bg-white border border-blue-200 rounded-2xl p-4 shadow-xs space-y-3 animate-in fade-in">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center flex-shrink-0 font-bold">
+                          {/\.(html|htm|jsx|tsx)$/i.test(attachedFile.name) ? (
+                            <FileCode className="w-5 h-5" />
+                          ) : (
+                            <FileText className="w-5 h-5" />
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <h5 className="font-bold text-xs text-slate-900 truncate">
+                            {attachedFile.name}
+                          </h5>
+                          <p className="text-[10px] text-slate-400 font-mono mt-0.5">
+                            {(attachedFile.size / 1024).toFixed(1)} KB &bull; {attachedFile.type || 'document'}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setAttachedFile(null)}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition"
+                        title="Remove attached file"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {/* Content Snippet Preview */}
+                    {attachedFile.content && (
+                      <div className="max-h-28 overflow-hidden rounded-xl bg-slate-900 p-2.5 font-mono text-[11px] text-slate-300 relative">
+                        <pre className="whitespace-pre-wrap break-all line-clamp-4">
+                          {attachedFile.content.substring(0, 300)}...
+                        </pre>
+                        <div className="absolute inset-x-0 bottom-0 h-6 bg-gradient-to-t from-slate-900 to-transparent pointer-events-none" />
+                      </div>
+                    )}
+
+                    {/* Action Buttons */}
+                    <div className="flex flex-col sm:flex-row items-center gap-2 pt-1">
+                      {/\.(html|htm)$/i.test(attachedFile.name) || attachedFile.content.includes('<html') || attachedFile.content.includes('<body') ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next: VibePageConfig = {
+                              ...config,
+                              custom_html: attachedFile.content,
+                              page_type: 'custom',
+                            };
+                            setConfig(next);
+                            setHtmlCode(attachedFile.content);
+                            recordSnapshot(next, `Imported File: ${attachedFile.name}`);
+                            setPreviewKey((k) => k + 1);
+                            alert(`File "${attachedFile.name}" loaded directly into the live preview canvas!`);
+                          }}
+                          className="w-full sm:flex-1 py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-xs"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Import Directly as Page HTML</span>
+                        </button>
+                      ) : null}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStudioTab('ai');
+                          setPromptText(`Adapt and convert this uploaded file (${attachedFile.name}) into a bespoke, high-converting TerraTern landing page with interactive elements and universal lead capture.`);
+                        }}
+                        className="w-full sm:flex-1 py-2.5 px-3 bg-[#00215C] hover:bg-[#255CC1] text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-xs"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-[#F1C819]" />
+                        <span>Send to Vibe Prompter</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Information Callout */}
+                <div className="p-4 bg-blue-50/60 border border-blue-200/80 rounded-2xl space-y-2 text-xs text-slate-600">
+                  <div className="flex items-center gap-2 text-[#00215C] font-bold">
+                    <Sparkles className="w-4 h-4 text-[#255CC1]" />
+                    <span>How File Ingestion Works</span>
+                  </div>
+                  <p>
+                    &bull; <strong>HTML files:</strong> Can be rendered directly in the live preview canvas or enhanced with AI.
+                  </p>
+                  <p>
+                    &bull; <strong>Document briefs (PDF / DOCX / TXT):</strong> Vibe AI extracts the requirements, points criteria, or offer details and synthesizes an interactive page.
+                  </p>
+                  <p>
+                    &bull; <strong>React / Tailwind components:</strong> Vibe AI converts them into production-ready HTML with auto-attributed TerraTern lead forms.
                   </p>
                 </div>
               </div>
@@ -1469,7 +1879,7 @@ export default function VibeStudioPage() {
                 className="text-xs font-bold text-rose-600 hover:text-rose-800 flex items-center gap-1"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
-                <span>Reset to Initial Template</span>
+                <span>Reset to Blank Canvas</span>
               </button>
             </div>
 
@@ -1580,20 +1990,26 @@ export default function VibeStudioPage() {
               </button>
             </div>
 
-            {/* TAB 1: Live Assessment & Social DM */}
+            {/* TAB 1: Live Assessment & Campaign UTM Builder */}
             {linksModalTab === 'live' && (
               <div className="space-y-4 animate-in fade-in duration-150">
                 {/* Direct Live URL */}
-                <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
+                <div className="p-4 bg-slate-50 border border-slate-200/90 rounded-2xl space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                      Live Assessment URL
-                    </span>
-                    <span className="text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded">
-                      Production Live
+                    <div className="flex items-center gap-2">
+                      <Globe className="w-4 h-4 text-blue-600" />
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                        Direct Live Page URL (Default)
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-200">
+                      Direct Link &bull; Live
                     </span>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <p className="text-xs text-slate-500">
+                    Default clean link without any query parameters. Inbound visitors will automatically be recorded with source: <span className="font-mono font-bold text-slate-700">direct</span>.
+                  </p>
+                  <div className="flex items-center gap-2 pt-1">
                     <input
                       type="text"
                       readOnly
@@ -1624,75 +2040,204 @@ export default function VibeStudioPage() {
                   </div>
                 </div>
 
-                {/* Social DM & ManyChat Link Builder */}
-                <div className="p-4 bg-blue-50/60 border border-blue-200/80 rounded-2xl space-y-3">
-                  <div className="flex items-center justify-between text-[#00215C]">
+                {/* Campaign UTM Builder Feature */}
+                <div className="p-4 bg-gradient-to-br from-blue-50/70 via-indigo-50/40 to-white border border-blue-200 rounded-2xl space-y-3.5 shadow-2xs">
+                  <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <Share2 className="w-4 h-4 text-[#255CC1]" />
-                      <h4 className="font-bold text-xs uppercase tracking-wider">
-                        Social DM / ManyChat Campaign Link
+                      <Sparkles className="w-4 h-4 text-[#255CC1]" />
+                      <h4 className="font-bold text-xs uppercase tracking-wider text-[#00215C]">
+                        Campaign UTM Builder (Feature)
                       </h4>
                     </div>
                     <span className="text-[10px] font-bold text-blue-700 bg-white px-2 py-0.5 rounded-full border border-blue-200">
-                      Attribution Tracked
+                      Optional Tracking
                     </span>
                   </div>
                   <p className="text-xs text-slate-600">
-                    Use this custom URL in your Instagram DMs, ManyChat automation, or bio link to track leads and dropoffs by keyword.
+                    Need to run a specific campaign or track ads? Customize source, medium, and campaign tags below to generate an attribution-ready link.
                   </p>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                  {/* Source Quick-Selector Chips */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                      1. Quick Source Preset
+                    </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        { id: 'instagram', label: 'Instagram' },
+                        { id: 'facebook', label: 'Facebook' },
+                        { id: 'whatsapp', label: 'WhatsApp' },
+                        { id: 'youtube', label: 'YouTube' },
+                        { id: 'linkedin', label: 'LinkedIn' },
+                        { id: 'email', label: 'Email' },
+                        { id: 'google', label: 'Google' },
+                      ].map((src) => {
+                        const isSelected = utmSource.toLowerCase() === src.id;
+                        return (
+                          <button
+                            key={src.id}
+                            type="button"
+                            onClick={() => setUtmSource(isSelected ? '' : src.id)}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition ${
+                              isSelected
+                                ? 'bg-[#00215C] text-white border-[#00215C] shadow-2xs'
+                                : 'bg-white text-slate-700 border-slate-200 hover:border-blue-300 hover:bg-blue-50/50'
+                            }`}
+                          >
+                            {src.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Medium Quick-Selector Chips */}
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                      2. Quick Medium Preset
+                    </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        { id: 'dm', label: 'DM / Chat' },
+                        { id: 'bio', label: 'Bio Link' },
+                        { id: 'story', label: 'Story' },
+                        { id: 'post', label: 'Post / Reel' },
+                        { id: 'ad', label: 'Paid Ad' },
+                        { id: 'newsletter', label: 'Newsletter' },
+                      ].map((med) => {
+                        const isSelected = utmMedium.toLowerCase() === med.id;
+                        return (
+                          <button
+                            key={med.id}
+                            type="button"
+                            onClick={() => setUtmMedium(isSelected ? '' : med.id)}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition ${
+                              isSelected
+                                ? 'bg-[#255CC1] text-white border-[#255CC1] shadow-2xs'
+                                : 'bg-white text-slate-700 border-slate-200 hover:border-blue-300 hover:bg-blue-50/50'
+                            }`}
+                          >
+                            {med.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Inputs Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1 text-xs">
                     <div>
                       <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
-                        Traffic Source
+                        utm_source
                       </label>
-                      <select
-                        value={socialPlatform}
-                        onChange={(e) => setSocialPlatform(e.target.value)}
-                        className="w-full p-2 bg-white border border-slate-200 rounded-lg font-semibold"
-                      >
-                        <option value="ig_dm">Instagram DM (Auto-reply)</option>
-                        <option value="ig_bio">Instagram Bio Link</option>
-                        <option value="wa_chat">WhatsApp Direct</option>
-                        <option value="fb_ad">Facebook / IG Ad</option>
-                        <option value="yt_bio">YouTube / Video Bio</option>
-                      </select>
+                      <input
+                        type="text"
+                        value={utmSource}
+                        onChange={(e) => setUtmSource(e.target.value)}
+                        placeholder="e.g. instagram"
+                        className="w-full p-2 bg-white border border-slate-200 rounded-lg font-mono text-xs focus:outline-none focus:border-blue-500"
+                      />
                     </div>
 
                     <div>
                       <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
-                        Campaign Keyword
+                        utm_medium
                       </label>
                       <input
                         type="text"
-                        value={campaignKeyword}
-                        onChange={(e) => setCampaignKeyword(e.target.value)}
-                        placeholder="e.g. GERMANY2026"
-                        className="w-full p-2 bg-white border border-slate-200 rounded-lg font-mono font-bold"
+                        value={utmMedium}
+                        onChange={(e) => setUtmMedium(e.target.value)}
+                        placeholder="e.g. bio, dm, ad"
+                        className="w-full p-2 bg-white border border-slate-200 rounded-lg font-mono text-xs focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                        utm_campaign
+                      </label>
+                      <input
+                        type="text"
+                        value={utmCampaign}
+                        onChange={(e) => setUtmCampaign(e.target.value)}
+                        placeholder="e.g. fall_launch_2026"
+                        className="w-full p-2 bg-white border border-slate-200 rounded-lg font-mono text-xs focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                        utm_term (Keyword)
+                      </label>
+                      <input
+                        type="text"
+                        value={utmTerm}
+                        onChange={(e) => setUtmTerm(e.target.value)}
+                        placeholder="e.g. express_entry"
+                        className="w-full p-2 bg-white border border-slate-200 rounded-lg font-mono text-xs focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">
+                        utm_content (Ad / Reel CTA)
+                      </label>
+                      <input
+                        type="text"
+                        value={utmContent}
+                        onChange={(e) => setUtmContent(e.target.value)}
+                        placeholder="e.g. hero_banner_v2, reel_nov5"
+                        className="w-full p-2 bg-white border border-slate-200 rounded-lg font-mono text-xs focus:outline-none focus:border-blue-500"
                       />
                     </div>
                   </div>
 
-                  {/* Generated Social Link */}
-                  <div className="flex items-center gap-2 pt-1">
-                    <input
-                      type="text"
-                      readOnly
-                      value={socialTrackedUrl}
-                      className="w-full bg-white px-3 py-2 border border-blue-200 rounded-xl text-xs font-mono text-blue-900 select-all"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        navigator.clipboard.writeText(socialTrackedUrl);
-                        setCopiedSocialLink(true);
-                        setTimeout(() => setCopiedSocialLink(false), 2000);
-                      }}
-                      className="px-3.5 py-2 bg-[#00215C] hover:bg-[#255CC1] text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition flex-shrink-0"
-                    >
-                      {copiedSocialLink ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                      <span>{copiedSocialLink ? 'Copied' : 'Copy'}</span>
-                    </button>
+                  {/* Generated Tagged URL Display */}
+                  <div className="pt-1.5 space-y-2">
+                    <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                      <span>Generated Campaign Link</span>
+                      {(utmSource || utmMedium || utmCampaign || utmTerm || utmContent) && (
+                        <button
+                          type="button"
+                          onClick={handleResetUtm}
+                          className="text-rose-600 hover:text-rose-800 lowercase font-medium underline"
+                        >
+                          reset to direct
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        readOnly
+                        value={getCustomCampaignUrl(baseLiveUrl)}
+                        className="w-full bg-white px-3 py-2 border border-blue-200 rounded-xl text-xs font-mono text-blue-900 select-all"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const campaignUrl = getCustomCampaignUrl(baseLiveUrl);
+                          navigator.clipboard.writeText(campaignUrl);
+                          setCopiedUtmLink(true);
+                          setTimeout(() => setCopiedUtmLink(false), 2000);
+                        }}
+                        className="px-3.5 py-2 bg-[#00215C] hover:bg-[#255CC1] text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition flex-shrink-0"
+                      >
+                        {copiedUtmLink ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                        <span>{copiedUtmLink ? 'Copied' : 'Copy Campaign Link'}</span>
+                      </button>
+                      {(utmSource || utmMedium || utmCampaign || utmTerm || utmContent) && (
+                        <a
+                          href={getCustomCampaignUrl(baseLiveUrl)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="p-2 bg-blue-100/60 text-blue-800 hover:bg-blue-200 rounded-xl transition flex-shrink-0"
+                          title="Test campaign link in new tab"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                        </a>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1776,8 +2321,8 @@ export default function VibeStudioPage() {
     phone: "{{phone}}",
     name: "{{full_name}}",
     email: "{{email}}",
-    source: "ig_dm",
-    keyword: campaignKeyword || customKeyword || config.keyword_suggestion || "GENERAL",
+    source: "manychat",
+    keyword: customKeyword || config.keyword_suggestion || "DIRECT",
     consent: true,
   },
   null,

@@ -53,9 +53,9 @@
       if (val) utm[k] = val;
     });
 
-    const source = params.get('src') || params.get('source') || utm.utm_source || null;
-    const keyword = params.get('kw') || params.get('keyword') || utm.utm_term || null;
-    const postId = params.get('post') || params.get('post_id') || null;
+    const source = utm.utm_source || params.get('src') || params.get('source') || 'direct';
+    const keyword = utm.utm_term || params.get('kw') || params.get('keyword') || null;
+    const postId = utm.utm_content || params.get('post_id') || params.get('post') || utm.utm_campaign || null;
 
     return { source: source, keyword: keyword, post_id: postId, utm: utm };
   }
