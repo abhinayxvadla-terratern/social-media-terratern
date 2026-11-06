@@ -292,13 +292,34 @@ export default function NativePublicLandingPage({ params }: DynamicPageProps) {
   // Render Full Custom Platform / HTML Page if configured
   if (config.custom_html && config.custom_html.trim().length > 30) {
     let finalHtml = config.custom_html;
+    const originUrl = typeof window !== 'undefined' ? window.location.origin : '';
+    const scriptSrc = originUrl ? `${originUrl}/connect.js` : '/connect.js';
+
+    const downloadEndpoint = page.pdf_download_url
+      ? (page.pdf_download_url.startsWith('http') ? page.pdf_download_url : `${originUrl}${page.pdf_download_url}`)
+      : (page.has_pdf ? `${originUrl}/api/v1/download?slug=${page.slug}` : '');
+
     const injection = `
       <script>
         window.__TT_PAGE_KEY__ = "${page.page_key}";
         window.__TT_PAGE_SLUG__ = "${page.slug}";
+        window.__TT_API_HOST__ = "${originUrl}";
+        window.__TT_DOWNLOAD_URL__ = "${downloadEndpoint}";
+        window.__TT_HAS_PDF__ = ${Boolean(page.has_pdf)};
       </script>
-      <script src="/connect.js" data-page-key="${page.page_key}" async></script>
+      <script src="${scriptSrc}" data-page-key="${page.page_key}" async></script>
     `;
+
+    // Inject base href so relative assets, styles, scripts and API requests resolve accurately
+    if (originUrl) {
+      if (finalHtml.includes('<head>')) {
+        finalHtml = finalHtml.replace('<head>', `<head><base href="${originUrl}/">`);
+      } else if (finalHtml.includes('<html>')) {
+        finalHtml = finalHtml.replace('<html>', `<html><head><base href="${originUrl}/"></head>`);
+      } else {
+        finalHtml = `<base href="${originUrl}/">` + finalHtml;
+      }
+    }
 
     if (finalHtml.includes('</body>')) {
       finalHtml = finalHtml.replace('</body>', `${injection}</body>`);
@@ -312,7 +333,7 @@ export default function NativePublicLandingPage({ params }: DynamicPageProps) {
           srcDoc={finalHtml}
           title={page.name || "Assessment"}
           className="w-full min-h-screen flex-1 border-0"
-          sandbox="allow-scripts allow-forms allow-same-origin allow-popups"
+          sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-downloads"
         />
       </div>
     );

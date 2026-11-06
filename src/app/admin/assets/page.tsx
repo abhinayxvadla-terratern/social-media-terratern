@@ -149,18 +149,11 @@ export default function AssetsManagementPage() {
     }
   };
 
-  // Generate signed link for downloading private PDF
-  const handleGenerateSignedUrl = async (asset: Asset) => {
-    try {
-      const { data, error } = await supabase.storage
-        .from("pdfs")
-        .createSignedUrl(asset.storage_path, 3600); // 1 hour link
-
-      if (error) throw error;
-      setSignedUrlData({ url: data.signedUrl, name: asset.name });
-    } catch (err: any) {
-      alert("Error generating signed link: " + err.message);
-    }
+  // Generate first-party download link for PDF document
+  const handleGenerateSignedUrl = (asset: Asset) => {
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const downloadUrl = `${origin}/api/v1/download?asset_id=${asset.id}`;
+    setSignedUrlData({ url: downloadUrl, name: asset.name });
   };
 
   // Attach Asset to a Page
@@ -229,10 +222,10 @@ export default function AssetsManagementPage() {
         <div>
           <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
             <FolderDown className="w-5 h-5 text-blue-600" />
-            <span>Digital Asset Library (Private PDFs)</span>
+            <span>Document & Resource Library</span>
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Store downloadable lead magnets, assessment roadmaps, and guides in private storage.
+            Manage downloadable guides, roadmaps, and checklist documents attached to your pages.
           </p>
         </div>
 
@@ -371,8 +364,8 @@ export default function AssetsManagementPage() {
               <table className="w-full text-left text-xs sm:text-sm">
                 <thead>
                   <tr className="bg-slate-50/75 border-b border-slate-200 text-slate-400 text-[11px] font-bold uppercase tracking-wider">
-                    <th className="py-3 px-4">Asset Details</th>
-                    <th className="py-3 px-4">Storage Path</th>
+                    <th className="py-3 px-4">Document Details</th>
+                    <th className="py-3 px-4">File Name</th>
                     <th className="py-3 px-4">Attached Pages</th>
                     <th className="py-3 px-4">Uploaded</th>
                     <th className="py-3 px-4 text-right">Actions</th>
@@ -404,9 +397,9 @@ export default function AssetsManagementPage() {
                           </div>
                         </td>
 
-                        {/* Storage Path */}
+                        {/* File Name */}
                         <td className="py-3.5 px-4 font-mono text-xs text-slate-600">
-                          {asset.storage_path}
+                          {asset.storage_path.replace(/^guides\//, '')}
                         </td>
 
                         {/* Attached Pages */}
@@ -483,8 +476,8 @@ export default function AssetsManagementPage() {
       <Modal
         isOpen={isUploadOpen}
         onClose={() => setIsUploadOpen(false)}
-        title="Upload PDF Asset"
-        description="Select a PDF document to store in the private 'pdfs' storage bucket (max 20MB)."
+        title="Upload PDF Document"
+        description="Select a PDF document to attach to your landing pages (max 20MB)."
         maxWidth="md"
       >
         <form onSubmit={handleUpload} className="space-y-4">
@@ -596,8 +589,8 @@ export default function AssetsManagementPage() {
         <Modal
           isOpen={true}
           onClose={() => setSignedUrlData(null)}
-          title="Signed Download URL Generated"
-          description="Because the storage bucket is private, this temporary signed link is valid for 60 minutes."
+          title="Direct Download Link"
+          description="First-party streaming link routed through your domain to ensure immediate, adblock-safe downloads."
           maxWidth="md"
         >
           <div className="space-y-4">
@@ -610,7 +603,7 @@ export default function AssetsManagementPage() {
 
             <div>
               <span className="text-xs font-bold uppercase tracking-wider text-slate-500 block mb-1">
-                Signed Download URL
+                Direct Download URL
               </span>
               <textarea
                 readOnly
@@ -659,7 +652,7 @@ export default function AssetsManagementPage() {
           <div className="space-y-4">
             <p className="text-sm text-slate-600 leading-relaxed">
               Are you sure you want to permanently delete{" "}
-              <strong>"{deleteConfirmAsset.name}"</strong>? It will be removed from private storage and any pages referencing it.
+              <strong>"{deleteConfirmAsset.name}"</strong>? It will be removed from any connected landing pages.
             </p>
             <div className="flex items-center justify-end gap-3 pt-3">
               <button

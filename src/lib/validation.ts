@@ -108,8 +108,8 @@ export interface LeadValidationResult {
   suggestions?: { email?: string };
   cleaned?: {
     name: string;
-    email: string;
-    phone_e164: string;
+    email: string | null;
+    phone_e164: string | null;
     country_code: string;
     consent: boolean;
   };
@@ -330,15 +330,19 @@ export function validateConsent(consent: unknown): { valid: boolean; error?: str
 }
 
 /**
- * Universal complete lead validation
+ * Universal complete lead validation:
+ * Supports standard landing forms as well as any custom HTML/React page/calculator/quiz.
+ * - Requires at least one contact channel (phone or email)
+ * - Name defaults to 'Visitor' if not asked or empty
+ * - Consent defaults to true unless explicitly unchecked (false)
  */
 export async function validateLead(
   data: {
-    name: unknown;
-    email: unknown;
-    phone: unknown;
+    name?: unknown;
+    email?: unknown;
+    phone?: unknown;
     country_code?: string;
-    consent: unknown;
+    consent?: unknown;
     honeypot?: unknown;
   },
   options: { checkMx?: boolean } = {}
@@ -353,29 +357,52 @@ export async function validateLead(
     };
   }
 
-  // Name
-  const nameRes = validateName(data.name);
-  if (!nameRes.valid) {
-    errors.name = nameRes.error!;
+  // Name: Optional for simple calculators/quizzes, defaults to 'Visitor'
+  let finalName = 'Visitor';
+  if (data.name && typeof data.name === 'string' && data.name.trim()) {
+    const nameRes = validateName(data.name);
+    if (nameRes.valid && nameRes.cleanedName) {
+      finalName = nameRes.cleanedName;
+    } else if (nameRes.error) {
+      // If user typed an invalid name, report it
+      errors.name = nameRes.error;
+    }
   }
 
-  // Email
-  const emailRes = await validateEmail(data.email, { checkMx: options.checkMx });
-  if (!emailRes.valid) {
-    errors.email = emailRes.error!;
+  // Contact Method: At least one of email or phone is required
+  const hasEmail = data.email && typeof data.email === 'string' && data.email.trim();
+  const hasPhone = data.phone && (typeof data.phone === 'string' || typeof data.phone === 'number') && String(data.phone).trim();
+
+  if (!hasEmail && !hasPhone) {
+    errors.contact = 'Please provide a valid phone number or email address.';
   }
 
-  // Phone
+  let finalEmail: string | null = null;
+  let emailSuggestion: string | undefined;
+  if (hasEmail) {
+    const emailRes = await validateEmail(data.email, { checkMx: options.checkMx });
+    if (!emailRes.valid) {
+      errors.email = emailRes.error!;
+    } else {
+      finalEmail = emailRes.cleanedEmail!;
+      emailSuggestion = emailRes.suggestion;
+    }
+  }
+
+  let finalPhone: string | null = null;
   const country = (data.country_code || 'IN').toUpperCase();
-  const phoneRes = validatePhone(data.phone, country);
-  if (!phoneRes.valid) {
-    errors.phone = phoneRes.error!;
+  if (hasPhone) {
+    const phoneRes = validatePhone(data.phone, country);
+    if (!phoneRes.valid) {
+      errors.phone = phoneRes.error!;
+    } else {
+      finalPhone = phoneRes.e164!;
+    }
   }
 
-  // Consent
-  const consentRes = validateConsent(data.consent);
-  if (!consentRes.valid) {
-    errors.consent = consentRes.error!;
+  // Consent: Defaults to true for interactive widgets unless explicitly false
+  if (data.consent === false || data.consent === 'false' || data.consent === 0) {
+    errors.consent = 'You must agree to continue.';
   }
 
   const valid = Object.keys(errors).length === 0;
@@ -383,12 +410,12 @@ export async function validateLead(
   return {
     valid,
     errors,
-    suggestions: emailRes.suggestion ? { email: emailRes.suggestion } : undefined,
+    suggestions: emailSuggestion ? { email: emailSuggestion } : undefined,
     cleaned: valid
       ? {
-          name: nameRes.cleanedName!,
-          email: emailRes.cleanedEmail!,
-          phone_e164: phoneRes.e164!,
+          name: finalName,
+          email: finalEmail,
+          phone_e164: finalPhone,
           country_code: country,
           consent: true,
         }

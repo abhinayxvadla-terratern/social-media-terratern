@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
 import { createClient } from '@/lib/supabase/server';
 import { getSupabaseServiceClient } from '@/lib/api-security';
 import { AdminRole } from '@/lib/types';
+
+export const dynamic = 'force-dynamic';
 
 // Helper to check caller is owner
 async function requireOwner() {
@@ -25,8 +28,8 @@ async function requireOwner() {
   return { authorized: true, callerId: user.id };
 }
 
-// GET /api/v1/admin/team - List team members
-export async function GET() {
+// GET /api/v1/admin/team - List team members and pending invites
+export async function GET(req: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -41,10 +44,40 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ success: true, members: members || [] });
+  const serviceClient = getSupabaseServiceClient();
+
+  // Also retrieve active pending invitations
+  const { data: invites } = await serviceClient
+    .from('team_invites')
+    .select('*')
+    .is('accepted_at', null)
+    .gt('expires_at', new Date().toISOString())
+    .order('created_at', { ascending: false });
+
+  const host = req.headers.get('host') || 'localhost:3000';
+  const protocol = req.headers.get('x-forwarded-proto') || (host.includes('localhost') ? 'http' : 'https');
+  const origin = req.headers.get('origin') || `${protocol}://${host}`;
+
+  const formattedInvites = (invites || []).map((inv: any) => ({
+    ...inv,
+    invite_link: `${origin}/admin/join?token=${inv.token}`,
+  }));
+
+  return NextResponse.json(
+    {
+      success: true,
+      members: members || [],
+      invites: formattedInvites,
+    },
+    {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+      },
+    }
+  );
 }
 
-// POST /api/v1/admin/team - Invite / Add team member (Owner only)
+// POST /api/v1/admin/team - Generate Invite Link for new team member (Owner only, zero passcode required)
 export async function POST(req: NextRequest) {
   const auth = await requireOwner();
   if (!auth.authorized) {
@@ -58,10 +91,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const { email, role = 'editor', password } = body || {};
+  const { email, role = 'editor' } = body || {};
 
   if (!email || typeof email !== 'string' || !email.includes('@')) {
-    return NextResponse.json({ error: 'Valid email is required' }, { status: 400 });
+    return NextResponse.json({ error: 'Valid email address is required' }, { status: 400 });
   }
 
   const validRoles: AdminRole[] = ['owner', 'editor', 'viewer'];
@@ -70,44 +103,49 @@ export async function POST(req: NextRequest) {
   }
 
   const serviceClient = getSupabaseServiceClient();
+  const cleanEmail = email.trim().toLowerCase();
 
-  // 1. Check if user already exists in auth.users
-  const { data: existingUsers } = await serviceClient.auth.admin.listUsers();
-  let targetUser = (existingUsers?.users || []).find(
-    (u) => u.email?.toLowerCase() === email.trim().toLowerCase()
-  );
+  // 1. Generate unique secure invite token
+  const token = crypto.randomBytes(24).toString('hex');
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 days validity
 
-  // 2. If user doesn't exist, create them
-  if (!targetUser) {
-    const tempPassword = password || `TT_${Math.random().toString(36).slice(2, 10)}!2026`;
-    const { data: newUser, error: createErr } = await serviceClient.auth.admin.createUser({
-      email: email.trim().toLowerCase(),
-      password: tempPassword,
-      email_confirm: true,
-    });
+  // 2. Invalidate any existing pending invites for this email
+  await serviceClient
+    .from('team_invites')
+    .delete()
+    .eq('email', cleanEmail)
+    .is('accepted_at', null);
 
-    if (createErr || !newUser.user) {
-      return NextResponse.json(
-        { error: createErr?.message || 'Failed to create user account' },
-        { status: 500 }
-      );
-    }
-    targetUser = newUser.user;
+  // 3. Insert new invite record
+  const { data: newInvite, error: insertErr } = await serviceClient
+    .from('team_invites')
+    .insert({
+      email: cleanEmail,
+      role,
+      token,
+      expires_at: expiresAt,
+    })
+    .select()
+    .single();
+
+  if (insertErr) {
+    return NextResponse.json({ error: 'Failed to create invite record: ' + insertErr.message }, { status: 500 });
   }
 
-  // 3. Insert or update in admin_users
-  const { error: rbacErr } = await serviceClient
-    .from('admin_users')
-    .upsert({ user_id: targetUser.id, role }, { onConflict: 'user_id' });
-
-  if (rbacErr) {
-    return NextResponse.json({ error: rbacErr.message }, { status: 500 });
-  }
+  // 4. Build absolute invite link
+  const host = req.headers.get('host') || 'localhost:3000';
+  const protocol = req.headers.get('x-forwarded-proto') || (host.includes('localhost') ? 'http' : 'https');
+  const origin = req.headers.get('origin') || `${protocol}://${host}`;
+  const inviteLink = `${origin}/admin/join?token=${token}`;
 
   return NextResponse.json({
     success: true,
-    message: `Team member ${email} assigned as ${role}`,
-    user: { id: targetUser.id, email: targetUser.email, role },
+    message: `Invite link created for ${cleanEmail}!`,
+    invite_link: inviteLink,
+    email: cleanEmail,
+    role,
+    token,
+    expires_at: expiresAt,
   });
 }
 
@@ -135,21 +173,21 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid role specified' }, { status: 400 });
   }
 
-  const serviceClient = getSupabaseServiceClient();
+  const supabase = await createClient();
 
   // If demoting an owner, verify there is at least one other owner
   if (role !== 'owner') {
-    const { count } = await serviceClient
+    const { count } = await supabase
       .from('admin_users')
       .select('*', { count: 'exact', head: true })
       .eq('role', 'owner');
 
     if ((count || 0) <= 1) {
-      const { data: target } = await serviceClient
+      const { data: target } = await supabase
         .from('admin_users')
         .select('role')
         .eq('user_id', user_id)
-        .single();
+        .maybeSingle();
 
       if (target?.role === 'owner') {
         return NextResponse.json(
@@ -160,7 +198,7 @@ export async function PATCH(req: NextRequest) {
     }
   }
 
-  const { error: updateErr } = await serviceClient
+  const { error: updateErr } = await supabase
     .from('admin_users')
     .update({ role })
     .eq('user_id', user_id);
@@ -181,25 +219,39 @@ export async function DELETE(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const userId = searchParams.get('user_id')?.trim();
+  const inviteId = searchParams.get('invite_id')?.trim();
 
-  if (!userId) {
-    return NextResponse.json({ error: 'user_id parameter is required' }, { status: 400 });
+  const supabase = await createClient();
+
+  // If revoking a pending invite
+  if (inviteId) {
+    const { error: inviteDelErr } = await supabase
+      .from('team_invites')
+      .delete()
+      .eq('id', inviteId);
+
+    if (inviteDelErr) {
+      return NextResponse.json({ error: inviteDelErr.message }, { status: 500 });
+    }
+    return NextResponse.json({ success: true, message: 'Invitation link revoked.' });
   }
 
-  const serviceClient = getSupabaseServiceClient();
+  if (!userId) {
+    return NextResponse.json({ error: 'user_id or invite_id parameter is required' }, { status: 400 });
+  }
 
   // Verify not deleting last owner
-  const { count } = await serviceClient
+  const { count } = await supabase
     .from('admin_users')
     .select('*', { count: 'exact', head: true })
     .eq('role', 'owner');
 
   if ((count || 0) <= 1) {
-    const { data: target } = await serviceClient
+    const { data: target } = await supabase
       .from('admin_users')
       .select('role')
       .eq('user_id', userId)
-      .single();
+      .maybeSingle();
 
     if (target?.role === 'owner') {
       return NextResponse.json(
@@ -209,7 +261,7 @@ export async function DELETE(req: NextRequest) {
     }
   }
 
-  const { error: delErr } = await serviceClient
+  const { error: delErr } = await supabase
     .from('admin_users')
     .delete()
     .eq('user_id', userId);

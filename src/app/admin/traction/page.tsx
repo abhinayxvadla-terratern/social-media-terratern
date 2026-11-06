@@ -170,6 +170,7 @@ export default function TractionAnalyticsPage() {
     const views = relevantStats.reduce((sum, s) => sum + Number(s.views || 0), 0);
     const starts = relevantStats.reduce((sum, s) => sum + Number(s.starts || 0), 0);
     const submits = relevantStats.reduce((sum, s) => sum + Number(s.submits || 0), 0);
+    const downloads = relevantStats.reduce((sum, s) => sum + Number(s.downloads || 0), 0);
     const leads = relevantStats.reduce((sum, s) => sum + Number(s.leads || 0), 0);
     const completeLeads = relevantStats.reduce(
       (sum, s) => sum + Number(s.complete_leads || 0),
@@ -182,6 +183,7 @@ export default function TractionAnalyticsPage() {
       views,
       starts,
       submits,
+      downloads,
       leads,
       completeLeads,
       conversionRate,
@@ -378,10 +380,10 @@ export default function TractionAnalyticsPage() {
               <ArrowDown className="w-4 h-4" />
             </div>
 
-            {/* Step 2: Starts */}
+            {/* Step 2: Engaged Starts */}
             <div className="space-y-1">
               <div className="flex items-center justify-between text-xs font-semibold">
-                <span className="text-slate-600">2. Funnel Starts</span>
+                <span className="text-slate-600">2. Engaged Visitors</span>
                 <span className="text-blue-600 font-bold">
                   {formatNumber(aggregated.starts)} (
                   {aggregated.views > 0
@@ -409,41 +411,10 @@ export default function TractionAnalyticsPage() {
               <ArrowDown className="w-4 h-4" />
             </div>
 
-            {/* Step 3: Submits */}
+            {/* Step 3: Captured Leads */}
             <div className="space-y-1">
               <div className="flex items-center justify-between text-xs font-semibold">
-                <span className="text-slate-600">3. Form Submits</span>
-                <span className="text-indigo-600 font-bold">
-                  {formatNumber(aggregated.submits)} (
-                  {aggregated.views > 0
-                    ? Math.round((aggregated.submits / aggregated.views) * 100)
-                    : 0}
-                  %)
-                </span>
-              </div>
-              <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-indigo-500 rounded-full transition-all duration-500"
-                  style={{
-                    width: `${
-                      aggregated.views > 0
-                        ? Math.min(100, Math.round((aggregated.submits / aggregated.views) * 100))
-                        : 0
-                    }%`,
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Dropdown indicator */}
-            <div className="flex justify-center -my-1 text-slate-300">
-              <ArrowDown className="w-4 h-4" />
-            </div>
-
-            {/* Step 4: Captured Leads */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between text-xs font-semibold">
-                <span className="text-slate-600">4. Leads Captured</span>
+                <span className="text-slate-600">3. Leads Captured</span>
                 <span className="text-emerald-600 font-bold">
                   {formatNumber(aggregated.leads)} (
                   {formatPercentage(aggregated.conversionRate)})

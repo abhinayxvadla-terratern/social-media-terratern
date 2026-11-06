@@ -123,7 +123,7 @@ export async function POST(req: NextRequest) {
           status: safeStatus,
           keyword: customKeyword || config.keyword_suggestion || null,
           pdf_asset_id: pdfAssetId || null,
-          allowed_origins: [origin],
+          allowed_origins: ['*'],
           closed_message:
             'This assessment is temporarily paused for updates. Please contact our team.',
           closed_redirect_url: 'https://terratern.com',

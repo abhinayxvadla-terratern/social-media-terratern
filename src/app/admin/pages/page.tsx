@@ -114,6 +114,20 @@ export default function PagesManagementPage() {
         .from("page_stats")
         .select("page_id, leads, conversion_percentage");
 
+      // Also fetch leads counts directly for 100% data reliability
+      const { data: leadCountsData } = await supabase
+        .from("leads")
+        .select("page_id");
+
+      const directLeadMap = new Map<string, number>();
+      if (leadCountsData) {
+        leadCountsData.forEach((l: any) => {
+          if (l.page_id) {
+            directLeadMap.set(l.page_id, (directLeadMap.get(l.page_id) || 0) + 1);
+          }
+        });
+      }
+
       const statsMap = new Map<string, { leads: number; conversion: number }>();
       if (statsData) {
         statsData.forEach((s: any) => {
@@ -127,10 +141,12 @@ export default function PagesManagementPage() {
       // Merge stats
       const mergedPages = (pagesData || []).map((p: any) => {
         const stat = statsMap.get(p.id);
+        const directCount = directLeadMap.get(p.id) || 0;
+        const finalLeads = Math.max(stat?.leads ?? 0, directCount);
         return {
           ...p,
-          leads_count: stat?.leads ?? 0,
-          conversion_percentage: stat?.conversion ?? 0,
+          leads_count: finalLeads,
+          conversion_percentage: stat?.conversion ?? (finalLeads > 0 ? 100 : 0),
         };
       });
 
@@ -250,7 +266,11 @@ export default function PagesManagementPage() {
 
       if (error) throw error;
 
-      setPages((prev) => prev.filter((p) => p.id !== deleteConfirmPage.id));
+      setPages((prev) => {
+        const next = prev.filter((p) => p.id !== deleteConfirmPage.id);
+        setCachedData("admin_pages", next);
+        return next;
+      });
       setDeleteConfirmPage(null);
     } catch (err: any) {
       alert("Error deleting page: " + err.message);
@@ -1631,6 +1651,47 @@ export default function PagesManagementPage() {
               </div>
             );
           })()}
+        </Modal>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmPage && (
+        <Modal
+          isOpen={true}
+          onClose={() => setDeleteConfirmPage(null)}
+          title="Delete Page"
+          description={`Are you sure you want to permanently delete "${deleteConfirmPage.name}"?`}
+          maxWidth="sm"
+        >
+          <div className="space-y-4">
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 space-y-1">
+              <p className="font-bold flex items-center gap-1.5">
+                <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0" />
+                <span>Permanent Action</span>
+              </p>
+              <p>
+                Deleting this page will remove its route (<code>/p/{deleteConfirmPage.slug}</code>). Any inbound links or active social campaigns using this URL will stop working.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmPage(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteConfirm}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition shadow-xs flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete Page</span>
+              </button>
+            </div>
+          </div>
         </Modal>
       )}
     </div>

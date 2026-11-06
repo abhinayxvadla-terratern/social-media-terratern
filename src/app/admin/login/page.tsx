@@ -59,7 +59,7 @@ function LoginForm() {
         // Not in admin_users! Sign out immediately
         await supabase.auth.signOut();
         throw new Error(
-          "Access Denied: Your account is authenticated, but not registered in the admin_users roster. Please contact the administrator."
+          "Access Denied: Your account is not registered as an authorized administrator. Please contact your team owner."
         );
       }
 

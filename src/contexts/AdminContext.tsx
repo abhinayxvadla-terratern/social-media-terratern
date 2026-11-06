@@ -189,7 +189,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
           </div>
           <h2 className="text-xl font-black text-slate-900 tracking-tight">Access Restricted</h2>
           <p className="text-sm text-slate-600 leading-relaxed">
-            Your authenticated account (<strong className="text-slate-900">{user?.email}</strong>) is not registered in the TerraTern administrative team roster.
+            Your account (<strong className="text-slate-900">{user?.email}</strong>) is not registered as an authorized administrator.
           </p>
           <div className="pt-2 flex items-center gap-3">
             <button

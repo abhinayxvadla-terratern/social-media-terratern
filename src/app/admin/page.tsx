@@ -27,6 +27,9 @@ import {
   Layers,
   BarChart3,
   Flame,
+  Download,
+  MousePointerClick,
+  UserCheck,
 } from 'lucide-react';
 
 interface TrafficChannelItem {
@@ -179,6 +182,11 @@ export default function AdminOverviewDashboard() {
           .order('created_at', { ascending: false })
           .limit(6);
 
+        // 2b. Fetch all leads summary directly for 100% count accuracy
+        const { data: allLeadsRaw } = await supabase
+          .from('leads')
+          .select('id, page_id, is_partial');
+
         // 3. Fetch Page Stats view
         const { data: pageStatsData } = await supabase
           .from('page_stats')
@@ -193,6 +201,21 @@ export default function AdminOverviewDashboard() {
         const allLeads = (leadsData as Lead[]) || [];
         const allStats = (pageStatsData as PageStat[]) || [];
 
+        // Count leads directly from leads table
+        const directPageLeadCounts = new Map<string, number>();
+        let directTotalLeads = 0;
+        let directCompleteLeads = 0;
+        let directPartialLeads = 0;
+
+        (allLeadsRaw || []).forEach((lead: any) => {
+          directTotalLeads++;
+          if (lead.is_partial) directPartialLeads++;
+          else directCompleteLeads++;
+          if (lead.page_id) {
+            directPageLeadCounts.set(lead.page_id, (directPageLeadCounts.get(lead.page_id) || 0) + 1);
+          }
+        });
+
         // Build stats lookup map
         const statsMap = new Map<string, { leads: number; conversion: number }>();
         allStats.forEach((s: any) => {
@@ -206,10 +229,12 @@ export default function AdminOverviewDashboard() {
         const mergedPages = allPages
           .map((p: any) => {
             const stat = statsMap.get(p.id);
+            const directCount = directPageLeadCounts.get(p.id) || 0;
+            const finalLeads = Math.max(stat?.leads ?? 0, directCount);
             return {
               ...p,
-              leads_count: stat?.leads ?? 0,
-              conversion_percentage: stat?.conversion ?? 0,
+              leads_count: finalLeads,
+              conversion_percentage: stat?.conversion ?? (finalLeads > 0 ? 100 : 0),
             };
           })
           .sort((a, b) => (b.leads_count || 0) - (a.leads_count || 0));
@@ -235,14 +260,17 @@ export default function AdminOverviewDashboard() {
         });
 
         const activePages = allPages.filter((p) => p.status === 'live').length;
-        const conv = views > 0 ? (totalL / views) * 100 : 0;
+        const finalTotalLeads = Math.max(totalL, directTotalLeads);
+        const finalCompleteLeads = Math.max(completeL, directCompleteLeads);
+        const finalPartialLeads = Math.max(partialL, directPartialLeads);
+        const conv = views > 0 ? (finalTotalLeads / views) * 100 : (finalTotalLeads > 0 ? 100 : 0);
 
         const newStats = {
-          totalLeads: totalL,
-          completeLeads: completeL,
-          partialLeads: partialL,
-          totalViews: views,
-          totalStarts: starts,
+          totalLeads: finalTotalLeads,
+          completeLeads: finalCompleteLeads,
+          partialLeads: finalPartialLeads,
+          totalViews: Math.max(views, finalTotalLeads),
+          totalStarts: Math.max(starts, finalTotalLeads),
           totalDownloads: downloads,
           conversionRate: conv,
           activePagesCount: activePages,
@@ -418,91 +446,70 @@ export default function AdminOverviewDashboard() {
             </Link>
           </div>
 
-          <div className="space-y-3.5 pt-2">
-            {/* Step 1: Views */}
-            <div className="space-y-1.5">
-              <div className="flex justify-between text-xs font-semibold">
-                <span className="text-slate-700">1. Total Page Views</span>
-                <span className="font-bold text-[#00215C] font-mono">{stats.totalViews} (100%)</span>
-              </div>
-              <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
-                <div
-                  className="bg-[#00215C] h-full rounded-full transition-all duration-500"
-                  style={{ width: stats.totalViews > 0 ? '100%' : '0%' }}
-                ></div>
-              </div>
-            </div>
+          {/* Funnel Pipeline Steps */}
+          {(() => {
+            const totalViews = stats.totalViews;
+            const totalEngaged = Math.max(stats.totalStarts, stats.totalLeads);
+            const totalLeads = stats.totalLeads;
 
-            {/* Step 2: Form Inquiries Initiated */}
-            {(() => {
-              const initiated = Math.max(stats.totalStarts, stats.totalLeads);
-              const initiatedPct = stats.totalViews > 0 ? Math.min(100, Math.round((initiated / stats.totalViews) * 100)) : (initiated > 0 ? 100 : 0);
+            const engagementRate = totalViews > 0
+              ? Math.min(100, Math.round((totalEngaged / totalViews) * 100))
+              : (totalEngaged > 0 ? 100 : 0);
 
-              return (
+            const leadConvRate = totalViews > 0
+              ? Math.min(100, Math.round((totalLeads / totalViews) * 100))
+              : (totalLeads > 0 ? 100 : 0);
+
+            return (
+              <div className="space-y-4 pt-2">
+                {/* Stage 1: Page Views */}
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-xs font-semibold">
-                    <span className="text-slate-700">2. Inquiries Initiated</span>
+                    <span className="text-slate-700">1. Total Page Views</span>
+                    <span className="font-bold text-[#00215C] font-mono">{formatNumber(totalViews)} (100%)</span>
+                  </div>
+                  <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                    <div
+                      className="bg-[#00215C] h-full rounded-full transition-all duration-500"
+                      style={{ width: totalViews > 0 ? '100%' : '0%' }}
+                    />
+                  </div>
+                </div>
+
+                {/* Stage 2: Engaged Visitors */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-xs font-semibold">
+                    <span className="text-slate-700">2. Engaged Visitors</span>
                     <span className="font-bold text-[#255CC1] font-mono">
-                      {initiated} ({initiatedPct}%)
+                      {formatNumber(totalEngaged)} ({engagementRate}%)
                     </span>
                   </div>
                   <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
                     <div
                       className="bg-[#255CC1] h-full rounded-full transition-all duration-500"
-                      style={{ width: `${initiatedPct}%` }}
-                    ></div>
+                      style={{ width: `${engagementRate}%` }}
+                    />
                   </div>
                 </div>
-              );
-            })()}
 
-            {/* Step 3: Verified Leads Captured */}
-            {(() => {
-              const leadsPct = stats.totalViews > 0 ? Math.min(100, Math.round((stats.totalLeads / stats.totalViews) * 100)) : (stats.totalLeads > 0 ? 100 : 0);
-
-              return (
+                {/* Stage 3: Verified Leads Captured */}
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-xs font-semibold">
                     <span className="text-slate-700">3. Verified Leads Captured</span>
                     <span className="font-bold text-emerald-600 font-mono">
-                      {stats.totalLeads} ({leadsPct}%)
+                      {formatNumber(totalLeads)} ({leadConvRate}%)
                     </span>
                   </div>
                   <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
                     <div
                       className="bg-emerald-500 h-full rounded-full transition-all duration-500"
-                      style={{ width: `${leadsPct}%` }}
-                    ></div>
+                      style={{ width: `${leadConvRate}%` }}
+                    />
                   </div>
                 </div>
-              );
-            })()}
-
-            {/* Step 4: Qualified Conversions */}
-            {(() => {
-              const complete = stats.completeLeads > 0 ? stats.completeLeads : stats.totalLeads;
-              const ratePct = stats.conversionRate > 0
-                ? Math.min(100, Math.round(stats.conversionRate))
-                : (stats.totalViews > 0 ? Math.min(100, Math.round((complete / stats.totalViews) * 100)) : (complete > 0 ? 100 : 0));
-
-              return (
-                <div className="space-y-1.5">
-                  <div className="flex justify-between text-xs font-semibold">
-                    <span className="text-slate-700">4. Qualified Complete Leads</span>
-                    <span className="font-bold text-indigo-600 font-mono">
-                      {complete} verified ({ratePct}%)
-                    </span>
-                  </div>
-                  <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
-                    <div
-                      className="bg-indigo-600 h-full rounded-full transition-all duration-500"
-                      style={{ width: `${ratePct}%` }}
-                    ></div>
-                  </div>
-                </div>
-              );
-            })()}
-          </div>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Right: Real Inbound Traffic Channels */}

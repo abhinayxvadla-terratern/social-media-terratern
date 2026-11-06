@@ -152,11 +152,8 @@ export async function POST(req: NextRequest) {
       storage_path: page.pdf_storage_path,
     });
 
-    const { data: signData } = await supabase.storage
-      .from('pdfs')
-      .createSignedUrl(page.pdf_storage_path, 600); // 10 minutes (600s)
-
-    downloadUrl = signData?.signedUrl || null;
+    // Provide first-party streaming download URL (prevents browser adblock/ERR_BLOCKED_BY_CLIENT)
+    downloadUrl = `/api/v1/download?key=${encodeURIComponent(page_key.trim())}&token=${encodeURIComponent(downloadToken || '')}`;
   }
 
   return NextResponse.json(
@@ -215,4 +212,27 @@ export async function GET(req: NextRequest) {
     count: leads?.length || 0,
     leads: leads || [],
   });
+}
+
+export async function DELETE(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  const id = searchParams.get('id')?.trim();
+
+  if (!id) {
+    return NextResponse.json({ error: 'Lead id (?id=...) is required.' }, { status: 400 });
+  }
+
+  const supabase = getSupabaseServiceClient();
+
+  // First delete associated events or allow ON DELETE SET NULL to take effect
+  const { error: delErr } = await supabase
+    .from('leads')
+    .delete()
+    .eq('id', id);
+
+  if (delErr) {
+    return NextResponse.json({ error: delErr.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true, message: 'Lead deleted successfully.' });
 }

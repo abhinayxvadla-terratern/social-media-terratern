@@ -471,30 +471,26 @@ export async function vibeCodePage(
 export function cleanPageName(text: string): string {
   if (!text || !text.trim()) return 'Global Mobility Assessment';
 
-  const p = text.toLowerCase().trim();
+  const trimmed = text.trim();
 
-  // Known program categories
+  // If already a clean title and not a natural-language conversational prompt, preserve the exact title
+  const isPrompt = /^(please|can you|i want to|create|make|build|design|generate)\b/i.test(trimmed);
+  if (!isPrompt && trimmed.length <= 60 && !trimmed.toLowerCase().includes('ask user to')) {
+    return trimmed;
+  }
+
+  const p = trimmed.toLowerCase();
+
+  // Known program categories for prompt fallback
   if (p.includes('dubai') || p.includes('uae')) return 'Dubai Golden Visa Evaluation';
   if (p.includes('germany') || p.includes('chancenkarte') || p.includes('opportunity card')) return 'Germany Opportunity Card Assessment';
   if (p.includes('canada') || p.includes('crs') || p.includes('express entry')) return 'Canada CRS Points Calculator';
   if (p.includes('australia') || p.includes('189') || p.includes('190')) return 'Australia PR Points Assessment';
   if (p.includes('uk') || p.includes('united kingdom') || p.includes('skilled worker')) return 'UK Skilled Worker Assessment';
   if (p.includes('eb-5') || p.includes('eb5') || p.includes('investor')) return 'Investor Visa Consultation';
-  if (p.includes('pdf') || p.includes('download') || p.includes('checklist') || p.includes('guide')) {
-    return 'PR Roadmap & PDF Guide';
-  }
-  if (p.includes('welcome') || p.includes('consultation') || p.includes('lead')) {
-    return 'Welcome & Consultation Portal';
-  }
-  if (p.includes('calculator') || p.includes('points') || p.includes('score')) {
-    return 'Points & Qualification Calculator';
-  }
-  if (p.includes('quiz') || p.includes('eligibility') || p.includes('check')) {
-    return 'Immigration Eligibility Assessment';
-  }
 
   // Strip prompt filler phrases
-  let clean = text
+  let clean = trimmed
     .replace(/^(please|can you|i want to|create|make|build|design|generate|a|an|the|page|quiz|for|landing|calculator|ask user to|fill name|email and phone|give them|download pdf option|eligibility assessment)\s+/gi, ' ')
     .replace(/(ask user to|fill name|email and phone|give them download pdf option|eligibility assessment)\s*$/gi, '')
     .replace(/\s+/g, ' ')
@@ -504,7 +500,7 @@ export function cleanPageName(text: string): string {
     clean = clean.split(' ').slice(0, 4).join(' ');
   }
 
-  if (!clean || clean.length < 3) return 'Global Immigration Assessment';
+  if (!clean || clean.length < 3) return trimmed || 'Global Immigration Assessment';
   return clean.charAt(0).toUpperCase() + clean.slice(1);
 }
 

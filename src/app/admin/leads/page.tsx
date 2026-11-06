@@ -29,6 +29,7 @@ import {
   ExternalLink,
   Tag,
   Share2,
+  Trash2,
 } from "lucide-react";
 import { getCachedData, setCachedData } from "@/lib/client-cache";
 
@@ -71,11 +72,16 @@ export default function LeadsManagementPage() {
   const [selectedSource, setSelectedSource] = useState<string>("all");
   const [selectedKeyword, setSelectedKeyword] = useState<string>("all");
   const [selectedCompleteness, setSelectedCompleteness] = useState<string>("all");
+  const [selectedDuplication, setSelectedDuplication] = useState<string>("all");
 
   // Lead Timeline Modal
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [leadEvents, setLeadEvents] = useState<FunnelEvent[]>([]);
   const [loadingEvents, setLoadingEvents] = useState(false);
+
+  // Lead Deletion Modal State
+  const [leadToDelete, setLeadToDelete] = useState<Lead | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Fetch leads and pages
   const fetchData = async () => {
@@ -116,6 +122,97 @@ export default function LeadsManagementPage() {
     fetchData();
   }, []);
 
+  // Compute lead duplication and multi-page drop counts across all leads
+  const contactDropMap = useMemo(() => {
+    const map: Record<string, { count: number; pageNames: Set<string>; pageIds: Set<string> }> = {};
+
+    leads.forEach((l) => {
+      const keys: string[] = [];
+      if (l.phone_e164) keys.push(`p:${l.phone_e164.trim()}`);
+      if (l.email) keys.push(`e:${l.email.trim().toLowerCase()}`);
+
+      const pageTitle = cleanPageName(l.page?.name || l.page_id || "Direct");
+
+      keys.forEach((k) => {
+        if (!map[k]) {
+          map[k] = { count: 0, pageNames: new Set(), pageIds: new Set() };
+        }
+        map[k].count += 1;
+        map[k].pageNames.add(pageTitle);
+        if (l.page_id) map[k].pageIds.add(l.page_id);
+      });
+    });
+
+    return map;
+  }, [leads]);
+
+  const getLeadDropInfo = (lead: Lead) => {
+    let maxCount = 1;
+    const pageNames = new Set<string>();
+    const pageIds = new Set<string>();
+
+    if (lead.phone_e164) {
+      const info = contactDropMap[`p:${lead.phone_e164.trim()}`];
+      if (info) {
+        maxCount = Math.max(maxCount, info.count);
+        info.pageNames.forEach((p) => pageNames.add(p));
+        info.pageIds.forEach((id) => pageIds.add(id));
+      }
+    }
+
+    if (lead.email) {
+      const info = contactDropMap[`e:${lead.email.trim().toLowerCase()}`];
+      if (info) {
+        maxCount = Math.max(maxCount, info.count);
+        info.pageNames.forEach((p) => pageNames.add(p));
+        info.pageIds.forEach((id) => pageIds.add(id));
+      }
+    }
+
+    return {
+      dropCount: maxCount,
+      isDuplicate: maxCount > 1,
+      pageCount: pageNames.size,
+      pages: Array.from(pageNames),
+    };
+  };
+
+  // Delete lead handler
+  const handleConfirmDeleteLead = async () => {
+    if (!leadToDelete) return;
+    setIsDeleting(true);
+    try {
+      // 1. Try direct authenticated delete with Supabase client
+      const { error: clientDelErr } = await supabase
+        .from("leads")
+        .delete()
+        .eq("id", leadToDelete.id);
+
+      // 2. Fallback to API route if client delete threw error
+      if (clientDelErr) {
+        const res = await fetch(`/api/v1/leads?id=${leadToDelete.id}`, {
+          method: "DELETE",
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(clientDelErr.message || data.error || "Failed to delete lead.");
+        }
+      }
+
+      const updated = leads.filter((l) => l.id !== leadToDelete.id);
+      setLeads(updated);
+      setCachedData("admin_leads", updated);
+      if (selectedLead?.id === leadToDelete.id) {
+        setSelectedLead(null);
+      }
+      setLeadToDelete(null);
+    } catch (err: any) {
+      alert(err.message || "A network error occurred while deleting the lead.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   // Fetch timeline events when a lead is selected
   const handleOpenLeadDetails = async (lead: Lead) => {
     setSelectedLead(lead);
@@ -123,7 +220,6 @@ export default function LeadsManagementPage() {
     setLeadEvents([]);
 
     try {
-      // Query events matching lead_id or visitor_id
       let query = supabase.from("events").select("*");
 
       if (lead.visitor_id) {
@@ -192,6 +288,17 @@ export default function LeadsManagementPage() {
           ? !lead.is_partial
           : lead.is_partial;
 
+      // Duplication filter
+      const dropInfo = getLeadDropInfo(lead);
+      let matchesDuplication = true;
+      if (selectedDuplication === "duplicates") {
+        matchesDuplication = dropInfo.isDuplicate;
+      } else if (selectedDuplication === "crosspage") {
+        matchesDuplication = dropInfo.pageCount > 1;
+      } else if (selectedDuplication === "unique") {
+        matchesDuplication = !dropInfo.isDuplicate;
+      }
+
       // Date Range
       let matchesDate = true;
       if (selectedDateRange !== "all") {
@@ -214,6 +321,7 @@ export default function LeadsManagementPage() {
         matchesSource &&
         matchesKeyword &&
         matchesCompleteness &&
+        matchesDuplication &&
         matchesDate
       );
     });
@@ -224,38 +332,50 @@ export default function LeadsManagementPage() {
     selectedSource,
     selectedKeyword,
     selectedCompleteness,
+    selectedDuplication,
     selectedDateRange,
+    contactDropMap,
   ]);
 
   // CSV Export
   const handleExportCSV = () => {
-    const exportRows = filteredLeads.map((lead) => ({
-      ID: lead.id,
-      Name: lead.name || "Anonymous",
-      Email: lead.email || "",
-      Phone: lead.phone_e164 || "",
-      Country: lead.country_code || "",
-      Page: lead.page?.name || lead.page_id,
-      Status: lead.is_partial ? "Partial Dropoff" : "Completed Lead",
-      Quiz_Score: lead.quiz_score ?? "",
-      Quiz_Result: lead.quiz_result || "",
-      Source: lead.source || "",
-      Keyword: lead.keyword || "",
-      Post_ID: lead.post_id || "",
-      Consent: lead.consent ? "Yes" : "No",
-      Visitor_ID: lead.visitor_id || "",
-      Created_At: lead.created_at,
-      UTM_Source: lead.utm?.utm_source || "",
-      UTM_Medium: lead.utm?.utm_medium || "",
-      UTM_Campaign: lead.utm?.utm_campaign || "",
-    }));
+    const exportRows = filteredLeads.map((lead) => {
+      const dropInfo = getLeadDropInfo(lead);
+      return {
+        ID: lead.id,
+        Name: lead.name || "Anonymous",
+        Email: lead.email || "",
+        Phone: lead.phone_e164 || "",
+        Drop_Count: dropInfo.dropCount,
+        Pages_Count: dropInfo.pageCount,
+        Pages_List: dropInfo.pages.join("; "),
+        Country: lead.country_code || "",
+        Page: lead.page?.name || lead.page_id,
+        Status: lead.is_partial ? "Partial Dropoff" : "Completed Lead",
+        Quiz_Score: lead.quiz_score ?? "",
+        Quiz_Result: lead.quiz_result || "",
+        Source: lead.source || "",
+        Keyword: lead.keyword || "",
+        Post_ID: lead.post_id || "",
+        Consent: lead.consent ? "Yes" : "No",
+        Visitor_ID: lead.visitor_id || "",
+        Created_At: lead.created_at,
+        UTM_Source: lead.utm?.utm_source || "",
+        UTM_Medium: lead.utm?.utm_medium || "",
+        UTM_Campaign: lead.utm?.utm_campaign || "",
+      };
+    });
 
     exportToCSV("terratern_leads_export", exportRows);
   };
 
+  const repeatLeadsCount = useMemo(() => {
+    return leads.filter((l) => getLeadDropInfo(l).isDuplicate).length;
+  }, [leads, contactDropMap]);
+
   return (
     <div className="space-y-6">
-      {/* 1. Key Numbers on Top (Phone-First Metric Tiles) */}
+      {/* 1. Key Numbers on Top (Avg Quiz Score REMOVED, Repeat Drops Added) */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
         <div className="p-4 bg-white border border-slate-200/80 rounded-2xl shadow-sm">
           <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
@@ -285,17 +405,15 @@ export default function LeadsManagementPage() {
         </div>
 
         <div className="p-4 bg-white border border-slate-200/80 rounded-2xl shadow-sm">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-blue-600 block mb-1">
-            Avg Quiz Score
+          <span className="text-[11px] font-bold uppercase tracking-wider text-purple-600 block mb-1">
+            Repeat Drops
           </span>
-          <span className="text-2xl font-black text-blue-600">
-            {leads.some((l) => l.quiz_score !== null)
-              ? Math.round(
-                  leads.reduce((acc, l) => acc + (l.quiz_score || 0), 0) /
-                    (leads.filter((l) => l.quiz_score !== null).length || 1)
-                )
-              : "—"}
-          </span>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-2xl font-black text-purple-600">
+              {formatNumber(repeatLeadsCount)}
+            </span>
+            <span className="text-[10px] font-semibold text-slate-400">multi-page drops</span>
+          </div>
         </div>
       </div>
 
@@ -326,7 +444,7 @@ export default function LeadsManagementPage() {
         </div>
 
         {/* Filters Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-2 border-t border-slate-100 text-xs">
+        <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 pt-2 border-t border-slate-100 text-xs">
           {/* Page Filter */}
           <div>
             <select
@@ -354,6 +472,20 @@ export default function LeadsManagementPage() {
               <option value="today">Today</option>
               <option value="7d">Last 7 Days</option>
               <option value="30d">Last 30 Days</option>
+            </select>
+          </div>
+
+          {/* Duplication & Drop Count Filter */}
+          <div>
+            <select
+              value={selectedDuplication}
+              onChange={(e) => setSelectedDuplication(e.target.value)}
+              className="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-purple-700 bg-purple-50/50"
+            >
+              <option value="all">All Drops</option>
+              <option value="duplicates">Repeat Drops (&gt;1x)</option>
+              <option value="crosspage">Cross-Page Drops</option>
+              <option value="unique">Single Drops Only</option>
             </select>
           </div>
 
@@ -390,7 +522,7 @@ export default function LeadsManagementPage() {
           </div>
 
           {/* Complete / Partial */}
-          <div className="col-span-2 sm:col-span-1">
+          <div>
             <select
               value={selectedCompleteness}
               onChange={(e) => setSelectedCompleteness(e.target.value)}
@@ -404,7 +536,7 @@ export default function LeadsManagementPage() {
         </div>
       </div>
 
-      {/* 3. Content Area: Stacked Cards on Mobile (360px) & Full Table on Desktop (768px+) */}
+      {/* 3. Content Area: Stacked Cards on Mobile & Full Table on Desktop */}
       {loading ? (
         <div className="p-12 text-center bg-white rounded-2xl border border-slate-200/80">
           <RefreshCw className="w-6 h-6 animate-spin text-blue-600 mx-auto mb-2" />
@@ -423,120 +555,132 @@ export default function LeadsManagementPage() {
           <Users className="w-10 h-10 text-slate-300 mx-auto mb-3" />
           <h3 className="text-base font-bold text-slate-800">No leads found</h3>
           <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1">
-            {search || selectedPageId !== "all" || selectedSource !== "all"
+            {search || selectedPageId !== "all" || selectedSource !== "all" || selectedDuplication !== "all"
               ? "Try adjusting your filters or search keywords."
               : "Leads captured from live landing pages and quizzes will appear here in real-time."}
           </p>
         </div>
       ) : (
         <>
-          {/* MOBILE VIEW (< 768px): Stacked Cards with Timeline Trigger */}
+          {/* MOBILE VIEW (< 768px): Stacked Cards with Timeline Trigger & Delete */}
           <div className="md:hidden space-y-3">
-            {filteredLeads.map((lead) => (
-              <div
-                key={lead.id}
-                onClick={() => handleOpenLeadDetails(lead)}
-                className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm space-y-3 active:bg-slate-50 transition-colors cursor-pointer"
-              >
-                {/* Header */}
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-700 font-black text-xs flex items-center justify-center flex-shrink-0">
-                      {lead.name ? lead.name.charAt(0).toUpperCase() : "?"}
+            {filteredLeads.map((lead) => {
+              const dropInfo = getLeadDropInfo(lead);
+              return (
+                <div
+                  key={lead.id}
+                  onClick={() => handleOpenLeadDetails(lead)}
+                  className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm space-y-3 active:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  {/* Header */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-700 font-black text-xs flex items-center justify-center flex-shrink-0">
+                        {lead.name ? lead.name.charAt(0).toUpperCase() : "?"}
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-sm text-slate-900 leading-tight">
+                          {lead.name || "Anonymous Visitor"}
+                        </h4>
+                        <p className="text-xs text-slate-500 font-mono mt-0.5">
+                          {lead.email || "No email"}
+                        </p>
+                        <span className="text-[10px] text-slate-400 font-mono block mt-0.5">
+                          {formatDateParts(lead.created_at).date} &bull; {formatDateParts(lead.created_at).time}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col items-end gap-1">
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                          lead.is_partial
+                            ? "bg-amber-50 text-amber-700 border border-amber-200"
+                            : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                        }`}
+                      >
+                        {lead.is_partial ? "Partial" : "Complete"}
+                      </span>
+                      {dropInfo.isDuplicate && (
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-0.5">
+                          <RefreshCw className="w-2.5 h-2.5" />
+                          <span>{dropInfo.dropCount}x drops</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Info Bar */}
+                  <div className="grid grid-cols-2 gap-2 text-xs py-2 border-y border-slate-100">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">
+                        Phone
+                      </span>
+                      <span className="font-mono text-slate-700">
+                        {lead.phone_e164 || "—"}
+                      </span>
                     </div>
                     <div>
-                      <h4 className="font-bold text-sm text-slate-900 leading-tight">
-                        {lead.name || "Anonymous Visitor"}
-                      </h4>
-                      <p className="text-xs text-slate-500 font-mono mt-0.5">
-                        {lead.email || "No email"}
-                      </p>
-                      <span className="text-[10px] text-slate-400 font-mono block mt-0.5">
-                        {formatDateParts(lead.created_at).date} &bull; {formatDateParts(lead.created_at).time}
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">
+                        Drop Count
+                      </span>
+                      <span className="font-bold text-slate-800">
+                        {dropInfo.dropCount > 1
+                          ? `${dropInfo.dropCount} times across ${dropInfo.pageCount} page(s)`
+                          : "1st drop"}
                       </span>
                     </div>
                   </div>
 
-                  <span
-                    className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                      lead.is_partial
-                        ? "bg-amber-50 text-amber-700 border border-amber-200"
-                        : "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                    }`}
-                  >
-                    {lead.is_partial ? "Partial" : "Complete"}
-                  </span>
-                </div>
+                  {/* Footer with Source Medium, Program & Quick Contact + Delete */}
+                  <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
+                    <div className="flex items-center gap-1.5 truncate max-w-[180px]">
+                      <span className="font-semibold text-slate-700 truncate">
+                        {cleanPageName(lead.page?.name || lead.quiz_result || "General Assessment")}
+                      </span>
+                      <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 text-[9px] font-bold">
+                        {lead.source || "direct"}
+                      </span>
+                    </div>
 
-                {/* Info Bar */}
-                <div className="grid grid-cols-2 gap-2 text-xs py-2 border-y border-slate-100">
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">
-                      Phone
-                    </span>
-                    <span className="font-mono text-slate-700">
-                      {lead.phone_e164 || "—"}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">
-                      Quiz Score
-                    </span>
-                    <span className="font-bold text-blue-600">
-                      {lead.quiz_score !== null ? `${lead.quiz_score} pts` : "—"}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Footer with Source Medium, Program & Quick Contact */}
-                <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
-                  <div className="flex items-center gap-1.5 truncate max-w-[200px]">
-                    <span className="font-semibold text-slate-700 truncate">
-                      {cleanPageName(lead.page?.name || lead.quiz_result || "General Assessment")}
-                    </span>
-                    <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 text-[9px] font-bold">
-                      {lead.source || "direct"}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                    {lead.phone_e164 && (
-                      <a
-                        href={`https://wa.me/${lead.phone_e164.replace('+', '')}?text=Hi%20${encodeURIComponent(
-                          lead.name || ''
-                        )},%20thank%20you%20for%20contacting%20TerraTern.`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="p-2 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition"
-                        title="Chat on WhatsApp"
+                    <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                      {lead.phone_e164 && (
+                        <a
+                          href={`https://wa.me/${lead.phone_e164.replace('+', '')}?text=Hi%20${encodeURIComponent(
+                            lead.name || ''
+                          )},%20thank%20you%20for%20contacting%20TerraTern.`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="p-2 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition"
+                          title="Chat on WhatsApp"
+                        >
+                          <MessageCircle className="w-4 h-4" />
+                        </a>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleOpenLeadDetails(lead)}
+                        className="px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-700 font-bold text-xs flex items-center gap-0.5"
                       >
-                        <MessageCircle className="w-4 h-4" />
-                      </a>
-                    )}
-                    {lead.email && (
-                      <a
-                        href={`mailto:${lead.email}?subject=TerraTern%20Assessment`}
-                        className="p-2 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition"
-                        title="Send Email"
+                        <span>Details</span>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLeadToDelete(lead)}
+                        className="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 transition"
+                        title="Delete lead"
                       >
-                        <Mail className="w-4 h-4" />
-                      </a>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => handleOpenLeadDetails(lead)}
-                      className="px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-700 font-bold text-xs flex items-center gap-0.5"
-                    >
-                      <span>Details</span>
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </button>
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
-          {/* DESKTOP VIEW (>= 768px): Full Data Table (Format: Date & Time | Name | Email | Contact | Page | Source Medium | Action) */}
+          {/* DESKTOP VIEW (>= 768px): Full Data Table (Format: Date & Time | Name | Email | Contact & Drops | Page | Source Medium | Action) */}
           <div className="hidden md:block bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs sm:text-sm">
@@ -545,7 +689,7 @@ export default function LeadsManagementPage() {
                     <th className="py-3.5 px-3.5 whitespace-nowrap">Date & Time</th>
                     <th className="py-3.5 px-3">Name</th>
                     <th className="py-3.5 px-3">Email</th>
-                    <th className="py-3.5 px-3 whitespace-nowrap">Contact</th>
+                    <th className="py-3.5 px-3 whitespace-nowrap">Contact & Drops</th>
                     <th className="py-3.5 px-3">Page</th>
                     <th className="py-3.5 px-3 whitespace-nowrap">Source Medium</th>
                     <th className="py-3.5 px-3 text-right">Action</th>
@@ -578,6 +722,7 @@ export default function LeadsManagementPage() {
 
                     const dateParts = formatDateParts(lead.created_at);
                     const displayName = cleanPageName(lead.page?.name || lead.quiz_result || "General Assessment");
+                    const dropInfo = getLeadDropInfo(lead);
 
                     return (
                       <tr
@@ -604,12 +749,28 @@ export default function LeadsManagementPage() {
                           <div className="truncate max-w-[180px]">{lead.email || "—"}</div>
                         </td>
 
-                        {/* 4. Contact */}
-                        <td className="py-3.5 px-3 text-xs font-mono font-bold text-slate-800 whitespace-nowrap">
-                          {lead.phone_e164 || "—"}
+                        {/* 4. Contact & Duplication Drops */}
+                        <td className="py-3.5 px-3 text-xs whitespace-nowrap">
+                          <div className="font-mono font-bold text-slate-800">{lead.phone_e164 || "—"}</div>
+                          <div className="mt-1 flex items-center gap-1">
+                            {dropInfo.isDuplicate ? (
+                              <span
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200"
+                                title={`This contact dropped ${dropInfo.dropCount} times across ${dropInfo.pageCount} page(s): ${dropInfo.pages.join(", ")}`}
+                              >
+                                <RefreshCw className="w-2.5 h-2.5 text-purple-600" />
+                                <span>{dropInfo.dropCount} drops</span>
+                                {dropInfo.pageCount > 1 && (
+                                  <span className="opacity-75 font-normal">({dropInfo.pageCount} pages)</span>
+                                )}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-slate-400 font-mono">1st drop</span>
+                            )}
+                          </div>
                         </td>
 
-                        {/* 5. Page (Named cleanly, not raw prompt) */}
+                        {/* 5. Page */}
                         <td className="py-3.5 px-3">
                           <div className="truncate max-w-[220px] font-bold text-slate-800 text-xs" title={lead.page?.name || displayName}>
                             {displayName}
@@ -629,11 +790,6 @@ export default function LeadsManagementPage() {
                             ) : (
                               <span className="text-slate-400 font-mono text-[11px]">/direct</span>
                             )}
-                            {lead.quiz_score !== null && (
-                              <span className="text-[10px] font-mono text-blue-600 font-bold">
-                                &bull; {lead.quiz_score} pts
-                              </span>
-                            )}
                           </div>
                         </td>
 
@@ -649,20 +805,33 @@ export default function LeadsManagementPage() {
                           )}
                         </td>
 
-                        {/* 7. Action */}
-                        <td className="py-3.5 px-3 text-right">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleOpenLeadDetails(lead);
-                            }}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-[#00215C] text-slate-700 hover:text-white font-bold text-xs transition shadow-2xs"
-                            title="View full lead timeline & answers"
-                          >
-                            <span>Details</span>
-                            <ChevronRight className="w-3.5 h-3.5" />
-                          </button>
+                        {/* 7. Action: Details + Delete */}
+                        <td className="py-3.5 px-3 text-right whitespace-nowrap">
+                          <div className="inline-flex items-center gap-1.5 justify-end">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenLeadDetails(lead);
+                              }}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-[#00215C] text-slate-700 hover:text-white font-bold text-xs transition shadow-2xs"
+                              title="View full lead timeline & answers"
+                            >
+                              <span>Details</span>
+                              <ChevronRight className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setLeadToDelete(lead);
+                              }}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition"
+                              title="Delete lead permanently"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -710,12 +879,15 @@ export default function LeadsManagementPage() {
 
               <div>
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
-                  Quiz Score & Outcome
+                  Drop Frequency
                 </span>
-                <div className="font-bold text-blue-600">
-                  {selectedLead.quiz_score !== null
-                    ? `${selectedLead.quiz_score} Points (${selectedLead.quiz_result || "Evaluated"})`
-                    : "Not a scored quiz"}
+                <div className="font-bold text-purple-700">
+                  {(() => {
+                    const info = getLeadDropInfo(selectedLead);
+                    return info.dropCount > 1
+                      ? `${info.dropCount} drops across ${info.pageCount} page(s)`
+                      : "Single initial drop";
+                  })()}
                 </div>
               </div>
 
@@ -729,6 +901,28 @@ export default function LeadsManagementPage() {
                 </div>
               </div>
             </div>
+
+            {/* Cross-Page Drops Summary */}
+            {(() => {
+              const info = getLeadDropInfo(selectedLead);
+              if (info.pages.length > 0) {
+                return (
+                  <div className="p-3.5 bg-purple-50/60 border border-purple-200/80 rounded-xl text-xs space-y-1.5">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-purple-800 block">
+                      Pages Dropped On ({info.pages.length})
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {info.pages.map((p, idx) => (
+                        <span key={idx} className="px-2 py-0.5 bg-white text-purple-900 border border-purple-200 rounded-md font-semibold text-[11px]">
+                          {p}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            })()}
 
             {/* Quick Contact Action Bar */}
             <div className="flex items-center gap-2">
@@ -821,7 +1015,6 @@ export default function LeadsManagementPage() {
 
                     return (
                       <div key={evt.id || idx} className="relative group">
-                        {/* Dot */}
                         <div className="absolute -left-[19px] top-1 w-3.5 h-3.5 rounded-full bg-white border-2 border-blue-600 group-hover:scale-125 transition-transform" />
 
                         <div className="p-3 bg-white border border-slate-200/80 rounded-xl shadow-xs space-y-1">
@@ -835,7 +1028,6 @@ export default function LeadsManagementPage() {
                             </span>
                           </div>
 
-                          {/* Event Meta JSON */}
                           {evt.meta && Object.keys(evt.meta).length > 0 && (
                             <pre className="p-2 bg-slate-50 rounded text-[11px] font-mono text-slate-600 overflow-x-auto mt-1 border border-slate-100">
                               {JSON.stringify(evt.meta, null, 2)}
@@ -849,13 +1041,76 @@ export default function LeadsManagementPage() {
               )}
             </div>
 
-            <div className="pt-3 border-t border-slate-100 flex justify-end">
+            {/* Modal Actions */}
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setLeadToDelete(selectedLead)}
+                className="px-3.5 py-2 text-rose-600 hover:bg-rose-50 border border-rose-200 font-bold text-xs rounded-xl transition flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete Lead</span>
+              </button>
               <button
                 type="button"
                 onClick={() => setSelectedLead(null)}
                 className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors touch-target"
               >
                 Close Details
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* 5. Delete Lead Confirmation Modal */}
+      {leadToDelete && (
+        <Modal
+          isOpen={true}
+          onClose={() => setLeadToDelete(null)}
+          title="Delete Lead"
+          description="Are you sure you want to delete this lead record? This action cannot be undone."
+          maxWidth="sm"
+        >
+          <div className="space-y-4">
+            <div className="p-3.5 bg-rose-50/80 border border-rose-200 rounded-xl text-xs space-y-2">
+              <p className="font-bold text-rose-800">
+                You are about to delete:
+              </p>
+              <div className="space-y-1 font-mono text-slate-800">
+                <div>Name: <strong>{leadToDelete.name || "Anonymous"}</strong></div>
+                <div>Phone: <strong>{leadToDelete.phone_e164 || "—"}</strong></div>
+                <div>Email: <strong>{leadToDelete.email || "—"}</strong></div>
+                <div>Page: <strong>{leadToDelete.page?.name || "Direct"}</strong></div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setLeadToDelete(null)}
+                disabled={isDeleting}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteLead}
+                disabled={isDeleting}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl transition flex items-center gap-1.5 shadow-sm"
+              >
+                {isDeleting ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Permanently Delete</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

@@ -84,6 +84,26 @@ export async function GET(req: NextRequest) {
   const rawAsset = page.pdf_asset ?? (page as any).assets;
   const asset: any = Array.isArray(rawAsset) ? rawAsset[0] : rawAsset;
 
+  let directPdfUrl: string | null = null;
+  if (asset?.storage_path) {
+    try {
+      const { data: signData, error: signErr } = await supabase.storage
+        .from('pdfs')
+        .createSignedUrl(asset.storage_path, 3600); // 1-hour signed link for attached document
+      if (signErr) {
+        console.warn('[Status API] createSignedUrl error:', signErr, 'for path:', asset.storage_path);
+      }
+      directPdfUrl = signData?.signedUrl || null;
+    } catch (e) {
+      console.warn('Failed to generate direct signed URL:', e);
+    }
+  }
+
+  const hasPdf = Boolean(page.pdf_asset_id && asset?.storage_path);
+  const firstPartyDownloadUrl = hasPdf
+    ? (page.slug ? `/api/v1/download?slug=${page.slug}` : `/api/v1/download?key=${page.page_key}`)
+    : null;
+
   return NextResponse.json(
     {
       live: isLive,
@@ -94,8 +114,9 @@ export async function GET(req: NextRequest) {
       page_type: page.page_type,
       closed_message: page.closed_message,
       closed_redirect_url: page.closed_redirect_url,
-      has_pdf: Boolean(page.pdf_asset_id),
+      has_pdf: hasPdf,
       pdf_name: asset?.name || null,
+      pdf_download_url: firstPartyDownloadUrl,
       config: page.config || {},
     },
     { headers: corsHeaders }
