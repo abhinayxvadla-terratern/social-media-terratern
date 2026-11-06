@@ -40,8 +40,12 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/admin/pages", request.url));
   }
 
-  // Admin routes protection
-  if (pathname.startsWith("/admin") && pathname !== "/admin/login") {
+  // Admin routes protection (exempt public admin auth routes: /admin/login and /admin/join)
+  if (
+    pathname.startsWith("/admin") &&
+    pathname !== "/admin/login" &&
+    pathname !== "/admin/join"
+  ) {
     if (!user) {
       const url = request.nextUrl.clone();
       url.pathname = "/admin/login";

@@ -120,11 +120,8 @@ function JoinTeamContent() {
         <div className="flex flex-col items-center text-center">
           <TerraTernLogo size="lg" variant="stacked" />
           <h2 className="mt-4 text-2xl font-black text-[#00215C] tracking-tight">
-            Join the TerraTern Team
+            Create Your Password
           </h2>
-          <p className="mt-1 text-xs sm:text-sm text-slate-500 max-w-sm">
-            Activate your administrative access to manage pages, leads, and conversion analytics.
-          </p>
         </div>
 
         {/* Card */}
@@ -147,7 +144,7 @@ function JoinTeamContent() {
                   onClick={() => router.push('/admin/login')}
                   className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition"
                 >
-                  Return to Sign In
+                  Go to Sign In
                 </button>
               </div>
             </div>
@@ -163,7 +160,7 @@ function JoinTeamContent() {
               {success && (
                 <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2.5">
                   <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
-                  <span className="font-semibold">Account activated! Redirecting to your dashboard...</span>
+                  <span className="font-semibold">Password saved! Redirecting to dashboard...</span>
                 </div>
               )}
 
@@ -184,7 +181,7 @@ function JoinTeamContent() {
               {/* Password Field */}
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                  Create Password *
+                  Password *
                 </label>
                 <div className="relative">
                   <input
@@ -235,11 +232,11 @@ function JoinTeamContent() {
                 {submitting ? (
                   <>
                     <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Activating Account...</span>
+                    <span>Saving Password...</span>
                   </>
                 ) : (
                   <>
-                    <span>Activate Account & Sign In</span>
+                    <span>Set Password & Sign In</span>
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}
