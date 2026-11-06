@@ -38,6 +38,7 @@ export interface Page {
   // Joined or calculated fields
   pdf_asset?: Asset | null;
   leads_count?: number;
+  views_count?: number;
   conversion_percentage?: number;
 }
 

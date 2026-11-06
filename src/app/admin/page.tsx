@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { Page, Lead, PageStat, DailyTrend } from '@/lib/types';
@@ -30,6 +30,11 @@ import {
   Download,
   MousePointerClick,
   UserCheck,
+  Filter,
+  Calendar,
+  ChevronDown,
+  RotateCcw,
+  SlidersHorizontal,
 } from 'lucide-react';
 
 interface TrafficChannelItem {
@@ -39,6 +44,55 @@ interface TrafficChannelItem {
   percentage: number;
   color: string;
   dotColor: string;
+}
+
+type TimeRange = 'all' | 'today' | '7d' | '30d' | 'this_month' | 'custom';
+type LeadTypeFilter = 'all' | 'complete' | 'partial';
+
+function matchesDateRange(
+  dateString: string | null | undefined,
+  range: TimeRange,
+  startDate?: string,
+  endDate?: string
+): boolean {
+  if (range === 'all' || !dateString) return true;
+  const itemDate = new Date(dateString);
+  if (isNaN(itemDate.getTime())) return true;
+
+  const now = new Date();
+  if (range === 'today') {
+    return (
+      itemDate.getFullYear() === now.getFullYear() &&
+      itemDate.getMonth() === now.getMonth() &&
+      itemDate.getDate() === now.getDate()
+    );
+  }
+  if (range === '7d') {
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    return itemDate >= sevenDaysAgo;
+  }
+  if (range === '30d') {
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    return itemDate >= thirtyDaysAgo;
+  }
+  if (range === 'this_month') {
+    return (
+      itemDate.getFullYear() === now.getFullYear() &&
+      itemDate.getMonth() === now.getMonth()
+    );
+  }
+  if (range === 'custom') {
+    if (startDate) {
+      const start = new Date(`${startDate}T00:00:00`);
+      if (!isNaN(start.getTime()) && itemDate < start) return false;
+    }
+    if (endDate) {
+      const end = new Date(`${endDate}T23:59:59.999`);
+      if (!isNaN(end.getTime()) && itemDate > end) return false;
+    }
+    return true;
+  }
+  return true;
 }
 
 function getChannelInfo(source: string | null | undefined): { label: string; color: string; dotColor: string } {
@@ -113,7 +167,7 @@ function getChannelInfo(source: string | null | undefined): { label: string; col
       dotColor: 'bg-indigo-600',
     };
   }
-  if (s.includes('manychat')) {
+  if (s.includes('manychat') || s.includes('auto_connector') || s.includes('connector')) {
     return {
       label: 'ManyChat Automation',
       color: 'bg-purple-600',
@@ -121,7 +175,7 @@ function getChannelInfo(source: string | null | undefined): { label: string; col
     };
   }
   return {
-    label: s.charAt(0).toUpperCase() + s.slice(1),
+    label: s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, ' '),
     color: 'bg-blue-500',
     dotColor: 'bg-blue-500',
   };
@@ -139,30 +193,20 @@ export default function AdminOverviewDashboard() {
   }>('admin_overview');
 
   const [loading, setLoading] = useState(() => !cached);
-  const [pages, setPages] = useState<Page[]>(() => cached?.pages || []);
-  const [recentLeads, setRecentLeads] = useState<Lead[]>(() => cached?.recentLeads || []);
-  const [trafficChannels, setTrafficChannels] = useState<TrafficChannelItem[]>(() => cached?.trafficChannels || []);
-  const [stats, setStats] = useState<{
-    totalLeads: number;
-    completeLeads: number;
-    partialLeads: number;
-    totalViews: number;
-    totalStarts: number;
-    totalDownloads: number;
-    conversionRate: number;
-    activePagesCount: number;
-    totalPagesCount: number;
-  }>(() => cached?.stats || {
-    totalLeads: 0,
-    completeLeads: 0,
-    partialLeads: 0,
-    totalViews: 0,
-    totalStarts: 0,
-    totalDownloads: 0,
-    conversionRate: 0,
-    activePagesCount: 0,
-    totalPagesCount: 0,
-  });
+
+  // Active filter state
+  const [timeRange, setTimeRange] = useState<TimeRange>('all');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
+  const [selectedPageId, setSelectedPageId] = useState<string>('all');
+  const [selectedSource, setSelectedSource] = useState<string>('all');
+  const [leadType, setLeadType] = useState<LeadTypeFilter>('all');
+
+  // Raw fetched data
+  const [rawPages, setRawPages] = useState<Page[]>(() => cached?.pages || []);
+  const [rawLeads, setRawLeads] = useState<Lead[]>(() => cached?.recentLeads || []);
+  const [rawEvents, setRawEvents] = useState<{ id: string; page_id: string | null; type: string; created_at: string }[]>([]);
+  const [pageStats, setPageStats] = useState<PageStat[]>([]);
 
   useEffect(() => {
     async function fetchOverview() {
@@ -175,144 +219,39 @@ export default function AdminOverviewDashboard() {
           .select('*')
           .order('created_at', { ascending: false });
 
-        // 2. Fetch Recent Leads
+        // 2. Fetch All Leads with page info
         const { data: leadsData } = await supabase
           .from('leads')
           .select('*, page:pages(id, name, slug)')
-          .order('created_at', { ascending: false })
-          .limit(6);
+          .order('created_at', { ascending: false });
 
-        // 2b. Fetch all leads summary directly for 100% count accuracy
-        const { data: allLeadsRaw } = await supabase
-          .from('leads')
-          .select('id, page_id, is_partial');
+        // 3. Fetch Raw Events for date & page filtering
+        const { data: eventsData } = await supabase
+          .from('events')
+          .select('id, page_id, type, created_at');
 
-        // 3. Fetch Page Stats view
+        // 4. Fetch Page Stats view
         const { data: pageStatsData } = await supabase
           .from('page_stats')
           .select('*');
 
-        // 4. Fetch Traffic Channels from leads_by_source
-        const { data: sourceData } = await supabase
-          .from('leads_by_source')
-          .select('*');
-
         const allPages = (pagesData as Page[]) || [];
-        const allLeads = (leadsData as Lead[]) || [];
+        const allLeads = (leadsData as unknown as Lead[]) || [];
+        const allEvents = (eventsData as any[]) || [];
         const allStats = (pageStatsData as PageStat[]) || [];
 
-        // Count leads directly from leads table
-        const directPageLeadCounts = new Map<string, number>();
-        let directTotalLeads = 0;
-        let directCompleteLeads = 0;
-        let directPartialLeads = 0;
-
-        (allLeadsRaw || []).forEach((lead: any) => {
-          directTotalLeads++;
-          if (lead.is_partial) directPartialLeads++;
-          else directCompleteLeads++;
-          if (lead.page_id) {
-            directPageLeadCounts.set(lead.page_id, (directPageLeadCounts.get(lead.page_id) || 0) + 1);
-          }
-        });
-
-        // Build stats lookup map
-        const statsMap = new Map<string, { leads: number; conversion: number }>();
-        allStats.forEach((s: any) => {
-          statsMap.set(s.page_id, {
-            leads: Number(s.leads || 0),
-            conversion: Number(s.conversion_percentage || 0),
-          });
-        });
-
-        // Merge stats with pages so leads_count and conversion_percentage are properly populated
-        const mergedPages = allPages
-          .map((p: any) => {
-            const stat = statsMap.get(p.id);
-            const directCount = directPageLeadCounts.get(p.id) || 0;
-            const finalLeads = Math.max(stat?.leads ?? 0, directCount);
-            return {
-              ...p,
-              leads_count: finalLeads,
-              conversion_percentage: stat?.conversion ?? (finalLeads > 0 ? 100 : 0),
-            };
-          })
-          .sort((a, b) => (b.leads_count || 0) - (a.leads_count || 0));
-
-        setPages(mergedPages);
-        setRecentLeads(allLeads);
-
-        // Aggregate Metrics
-        let views = 0;
-        let starts = 0;
-        let downloads = 0;
-        let totalL = 0;
-        let completeL = 0;
-        let partialL = 0;
-
-        allStats.forEach((s) => {
-          views += s.views || 0;
-          starts += s.starts || 0;
-          downloads += s.downloads || 0;
-          totalL += s.leads || 0;
-          completeL += s.complete_leads || 0;
-          partialL += s.partial_leads || 0;
-        });
-
-        const activePages = allPages.filter((p) => p.status === 'live').length;
-        const finalTotalLeads = Math.max(totalL, directTotalLeads);
-        const finalCompleteLeads = Math.max(completeL, directCompleteLeads);
-        const finalPartialLeads = Math.max(partialL, directPartialLeads);
-        const conv = views > 0 ? (finalTotalLeads / views) * 100 : (finalTotalLeads > 0 ? 100 : 0);
-
-        const newStats = {
-          totalLeads: finalTotalLeads,
-          completeLeads: finalCompleteLeads,
-          partialLeads: finalPartialLeads,
-          totalViews: Math.max(views, finalTotalLeads),
-          totalStarts: Math.max(starts, finalTotalLeads),
-          totalDownloads: downloads,
-          conversionRate: conv,
-          activePagesCount: activePages,
-          totalPagesCount: allPages.length,
-        };
-
-        setStats(newStats);
-
-        // Aggregate Traffic Channels from real database records
-        const channelCounts: Record<string, number> = {};
-        (sourceData || []).forEach((row: any) => {
-          const raw = (row.source || 'direct / organic').toLowerCase().trim();
-          channelCounts[raw] = (channelCounts[raw] || 0) + (row.total_leads || 0);
-        });
-
-        if (Object.keys(channelCounts).length === 0 && totalL > 0) {
-          channelCounts['direct / organic'] = totalL;
-        }
-
-        const totalChanneled = Object.values(channelCounts).reduce((a, b) => a + b, 0) || totalL || 1;
-
-        const channels: TrafficChannelItem[] = Object.entries(channelCounts)
-          .map(([src, count]) => {
-            const info = getChannelInfo(src);
-            return {
-              channel: info.label,
-              source: src,
-              count,
-              percentage: Math.round((count / totalChanneled) * 100),
-              color: info.color,
-              dotColor: info.dotColor,
-            };
-          })
-          .sort((a, b) => b.count - a.count);
-
-        setTrafficChannels(channels);
+        setRawPages(allPages);
+        setRawLeads(allLeads);
+        setRawEvents(allEvents);
+        setPageStats(allStats);
 
         setCachedData('admin_overview', {
-          pages: mergedPages,
-          recentLeads: allLeads,
-          stats: newStats,
-          trafficChannels: channels,
+          pages: allPages,
+          recentLeads: allLeads.slice(0, 6),
+          stats: {
+            totalLeads: allLeads.length,
+            totalPagesCount: allPages.length,
+          },
         });
       } catch (err) {
         console.error('Failed to load overview analytics:', err);
@@ -322,6 +261,293 @@ export default function AdminOverviewDashboard() {
     }
     fetchOverview();
   }, []);
+
+  const isFiltered =
+    timeRange !== 'all' ||
+    selectedPageId !== 'all' ||
+    selectedSource !== 'all' ||
+    leadType !== 'all' ||
+    Boolean(startDate) ||
+    Boolean(endDate);
+
+  const handleResetFilters = () => {
+    setTimeRange('all');
+    setStartDate('');
+    setEndDate('');
+    setSelectedPageId('all');
+    setSelectedSource('all');
+    setLeadType('all');
+  };
+
+  // 1. Pages that are active (status === 'live')
+  const activePages = useMemo(() => {
+    return rawPages.filter((p) => p.status === 'live');
+  }, [rawPages]);
+
+  const activePageIds = useMemo(() => {
+    return new Set(activePages.map((p) => p.id));
+  }, [activePages]);
+
+  // 2. Traffic sources ONLY from active pages
+  const activeSources = useMemo(() => {
+    const sourcesSet = new Set<string>();
+
+    const matchesPage = (pageId: string | null | undefined) => {
+      if (!pageId) return false;
+      if (selectedPageId !== 'all') {
+        return pageId === selectedPageId;
+      }
+      return activePageIds.has(pageId);
+    };
+
+    // Sources from leads on active pages
+    rawLeads.forEach((lead) => {
+      if (matchesPage(lead.page_id)) {
+        const info = getChannelInfo(lead.source);
+        if (info.label) sourcesSet.add(info.label);
+      }
+    });
+
+    // Sources from events on active pages
+    rawEvents.forEach((ev) => {
+      if (matchesPage(ev.page_id)) {
+        const rawSource = (ev as any).meta?.source;
+        const info = getChannelInfo(rawSource || 'direct');
+        if (info.label) sourcesSet.add(info.label);
+      }
+    });
+
+    return Array.from(sourcesSet).sort();
+  }, [rawLeads, rawEvents, activePageIds, selectedPageId]);
+
+  // Compute filtered metrics dynamically
+  const computedData = useMemo(() => {
+    // 1. Filter Leads
+    const filteredLeads = rawLeads.filter((lead) => {
+      // Date filter
+      if (!matchesDateRange(lead.created_at, timeRange, startDate, endDate)) return false;
+
+      // Page filter (only active pages unless specific page selected)
+      if (selectedPageId !== 'all') {
+        if (lead.page_id !== selectedPageId) return false;
+      }
+
+      // Source filter
+      if (selectedSource !== 'all') {
+        const info = getChannelInfo(lead.source);
+        if (info.label !== selectedSource) return false;
+      }
+
+      // Lead type filter
+      if (leadType === 'complete' && lead.is_partial) return false;
+      if (leadType === 'partial' && !lead.is_partial) return false;
+
+      return true;
+    });
+
+    // 2. Filter Events
+    const filteredEvents = rawEvents.filter((event) => {
+      // Date filter
+      if (!matchesDateRange(event.created_at, timeRange, startDate, endDate)) return false;
+
+      // Page filter
+      if (selectedPageId !== 'all') {
+        if (event.page_id !== selectedPageId) return false;
+      }
+
+      return true;
+    });
+
+    // 3. Aggregate Leads metrics
+    const totalLeads = filteredLeads.length;
+    const completeLeads = filteredLeads.filter((l) => !l.is_partial).length;
+    const partialLeads = filteredLeads.filter((l) => l.is_partial).length;
+
+    // 4. Aggregate Event metrics
+    let viewsFromEvents = 0;
+    let startsFromEvents = 0;
+    let downloadsFromEvents = 0;
+
+    filteredEvents.forEach((ev) => {
+      if (ev.type === 'view') viewsFromEvents++;
+      else if (ev.type === 'start') startsFromEvents++;
+      else if (ev.type === 'download') downloadsFromEvents++;
+    });
+
+    // Baseline stats from pageStats view (when no date filter is active)
+    let viewsFromStats = 0;
+    let startsFromStats = 0;
+    let downloadsFromStats = 0;
+
+    pageStats.forEach((s) => {
+      if (selectedPageId !== 'all' && s.page_id !== selectedPageId) {
+        return;
+      }
+      viewsFromStats += s.views || 0;
+      startsFromStats += s.starts || 0;
+      downloadsFromStats += s.downloads || 0;
+    });
+
+    const isDateRestricted = timeRange !== 'all' && (timeRange !== 'custom' || Boolean(startDate || endDate));
+
+    const totalViews =
+      !isDateRestricted
+        ? Math.max(viewsFromStats, viewsFromEvents, totalLeads)
+        : Math.max(viewsFromEvents, totalLeads);
+
+    const totalStarts =
+      !isDateRestricted
+        ? Math.max(startsFromStats, startsFromEvents, totalLeads)
+        : Math.max(startsFromEvents, totalLeads);
+
+    const totalDownloads =
+      !isDateRestricted
+        ? Math.max(downloadsFromStats, downloadsFromEvents)
+        : downloadsFromEvents;
+
+    const conversionRate =
+      totalViews > 0
+        ? (totalLeads / totalViews) * 100
+        : totalLeads > 0
+        ? 100
+        : 0;
+
+    // 5. Pages status
+    const relevantPages = selectedPageId !== 'all'
+      ? rawPages.filter((p) => p.id === selectedPageId)
+      : activePages;
+    const activePagesCount = relevantPages.filter((p) => p.status === 'live').length;
+    const totalPagesCount = relevantPages.length;
+
+    // 6. Traffic Channels Breakdown (strictly from active pages)
+    const channelCounts: Record<string, number> = {};
+    filteredLeads.forEach((lead) => {
+      if (lead.page_id && activePageIds.has(lead.page_id)) {
+        const info = getChannelInfo(lead.source);
+        channelCounts[info.label] = (channelCounts[info.label] || 0) + 1;
+      }
+    });
+
+    // If no leads yet, attribute from events on active pages
+    if (Object.keys(channelCounts).length === 0) {
+      filteredEvents.forEach((ev) => {
+        if (ev.page_id && activePageIds.has(ev.page_id)) {
+          const raw = (ev as any).meta?.source;
+          const info = getChannelInfo(raw || (ev.type === 'view' ? 'direct' : ''));
+          channelCounts[info.label] = (channelCounts[info.label] || 0) + 1;
+        }
+      });
+    }
+
+    if (Object.keys(channelCounts).length === 0 && totalLeads > 0) {
+      channelCounts['Direct / Organic'] = totalLeads;
+    }
+
+    const totalChanneled =
+      Object.values(channelCounts).reduce((a, b) => a + b, 0) || totalLeads || 1;
+
+    const trafficChannelsList: TrafficChannelItem[] = Object.entries(channelCounts)
+      .map(([channelLabel, count]) => {
+        const info = getChannelInfo(channelLabel);
+        return {
+          channel: channelLabel,
+          source: channelLabel,
+          count,
+          percentage: Math.round((count / totalChanneled) * 100),
+          color: info.color,
+          dotColor: info.dotColor,
+        };
+      })
+      .sort((a, b) => b.count - a.count);
+
+    // 7. Pages ranking with filtered stats
+    const pageLeadCounts = new Map<string, number>();
+    filteredLeads.forEach((lead) => {
+      if (lead.page_id) {
+        pageLeadCounts.set(lead.page_id, (pageLeadCounts.get(lead.page_id) || 0) + 1);
+      }
+    });
+
+    const rankedPages = rawPages
+      .map((p) => {
+        const directCount = pageLeadCounts.get(p.id) || 0;
+        const stat = pageStats.find((s) => s.page_id === p.id);
+        const leadsCount = isFiltered ? directCount : Math.max(stat?.leads ?? 0, directCount);
+        return {
+          ...p,
+          leads_count: leadsCount,
+          conversion_percentage: stat?.conversion_percentage ?? (leadsCount > 0 ? 100 : 0),
+        };
+      })
+      .filter((p) => {
+        if (selectedPageId !== 'all') return p.id === selectedPageId;
+        return p.status === 'live';
+      })
+      .sort((a, b) => (b.leads_count || 0) - (a.leads_count || 0));
+
+    return {
+      totalLeads,
+      completeLeads,
+      partialLeads,
+      totalViews,
+      totalStarts,
+      totalDownloads,
+      conversionRate,
+      activePagesCount,
+      totalPagesCount,
+      trafficChannels: trafficChannelsList,
+      recentLeads: filteredLeads.slice(0, 6),
+      pages: rankedPages,
+    };
+  }, [
+    rawLeads,
+    rawEvents,
+    rawPages,
+    pageStats,
+    timeRange,
+    startDate,
+    endDate,
+    selectedPageId,
+    selectedSource,
+    leadType,
+    isFiltered,
+    activePageIds,
+    activePages,
+  ]);
+
+  // Display count for the Total Leads card based on leadType selection
+  const displayLeadsCount =
+    leadType === 'complete'
+      ? computedData.completeLeads
+      : leadType === 'partial'
+      ? computedData.partialLeads
+      : computedData.totalLeads;
+
+  // Selected single page if user chose one
+  const selectedPage =
+    selectedPageId !== 'all'
+      ? rawPages.find((p) => p.id === selectedPageId)
+      : null;
+
+  // Time range friendly label
+  const timeRangeLabel =
+    timeRange === 'today'
+      ? 'Today'
+      : timeRange === '7d'
+      ? 'Last 7 Days'
+      : timeRange === '30d'
+      ? 'Last 30 Days'
+      : timeRange === 'this_month'
+      ? 'This Month'
+      : timeRange === 'custom'
+      ? startDate && endDate
+        ? `${startDate} to ${endDate}`
+        : startDate
+        ? `From ${startDate}`
+        : endDate
+        ? `Until ${endDate}`
+        : 'Custom Range'
+      : 'All Time';
 
   return (
     <div className="space-y-6">
@@ -353,9 +579,156 @@ export default function AdminOverviewDashboard() {
         )}
       </div>
 
+      {/* 1b. Filters Bar */}
+      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-2xs space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Filter className="w-3.5 h-3.5 text-[#255CC1]" />
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+              Filters
+            </h2>
+          </div>
+
+          {isFiltered && (
+            <button
+              onClick={handleResetFilters}
+              className="text-xs font-bold text-[#255CC1] hover:underline flex items-center gap-1 active:scale-95 transition"
+              title="Reset filters"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>Reset</span>
+            </button>
+          )}
+        </div>
+
+        {/* 4 Filters Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-start">
+          {/* Campaign Filter */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+              Campaign
+            </label>
+            <div className="relative">
+              <select
+                value={selectedPageId}
+                onChange={(e) => setSelectedPageId(e.target.value)}
+                className="w-full text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 pr-8 focus:outline-none focus:ring-1 focus:ring-[#255CC1] cursor-pointer appearance-none transition"
+              >
+                <option value="all">All Pages ({activePages.length})</option>
+                {activePages.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {cleanPageName(p.name)}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 pointer-events-none absolute right-2.5 top-2.5" />
+            </div>
+          </div>
+
+          {/* Source Filter (Only Active Pages) */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+              Source
+            </label>
+            <div className="relative">
+              <select
+                value={selectedSource}
+                onChange={(e) => setSelectedSource(e.target.value)}
+                className="w-full text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 pr-8 focus:outline-none focus:ring-1 focus:ring-[#255CC1] cursor-pointer appearance-none transition"
+              >
+                <option value="all">All Sources ({activeSources.length})</option>
+                {activeSources.map((src) => (
+                  <option key={src} value={src}>
+                    {src}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 pointer-events-none absolute right-2.5 top-2.5" />
+            </div>
+          </div>
+
+          {/* Date Range Filter */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+              Date Range
+            </label>
+            <div className="relative">
+              <select
+                value={timeRange}
+                onChange={(e) => {
+                  const val = e.target.value as TimeRange;
+                  setTimeRange(val);
+                  if (val !== 'custom') {
+                    setStartDate('');
+                    setEndDate('');
+                  }
+                }}
+                className="w-full text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 pr-8 focus:outline-none focus:ring-1 focus:ring-[#255CC1] cursor-pointer appearance-none transition"
+              >
+                <option value="all">All Time</option>
+                <option value="today">Today</option>
+                <option value="7d">Last 7 Days</option>
+                <option value="30d">Last 30 Days</option>
+                <option value="this_month">This Month</option>
+                <option value="custom">Custom Range (From / To)</option>
+              </select>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 pointer-events-none absolute right-2.5 top-2.5" />
+            </div>
+
+            {timeRange === 'custom' && (
+              <div className="pt-2 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 w-10 shrink-0">
+                    From
+                  </span>
+                  <input
+                    type="date"
+                    value={startDate}
+                    max={endDate || undefined}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="w-full text-xs font-medium text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#255CC1] transition"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 w-10 shrink-0">
+                    To
+                  </span>
+                  <input
+                    type="date"
+                    value={endDate}
+                    min={startDate || undefined}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="w-full text-xs font-medium text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#255CC1] transition"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Lead Status Filter */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+              Lead Status
+            </label>
+            <div className="relative">
+              <select
+                value={leadType}
+                onChange={(e) => setLeadType(e.target.value as any)}
+                className="w-full text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 pr-8 focus:outline-none focus:ring-1 focus:ring-[#255CC1] cursor-pointer appearance-none transition"
+              >
+                <option value="all">All Leads</option>
+                <option value="complete">Complete</option>
+                <option value="partial">Partial</option>
+              </select>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 pointer-events-none absolute right-2.5 top-2.5" />
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* 2. Top Executive KPI Cards (4 Metric Cards) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        {/* Total Leads */}
+        {/* Card 1: Total Leads */}
         <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-2xs space-y-1">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
@@ -366,14 +739,14 @@ export default function AdminOverviewDashboard() {
             </div>
           </div>
           <div className="text-2xl sm:text-3xl font-black text-[#00215C]">
-            {loading ? '—' : formatNumber(stats.totalLeads)}
+            {loading ? '—' : formatNumber(displayLeadsCount)}
           </div>
           <p className="text-[11px] text-slate-500 font-medium">
-            {stats.completeLeads} complete &bull; {stats.partialLeads} partial
+            {computedData.completeLeads} complete &bull; {computedData.partialLeads} partial
           </p>
         </div>
 
-        {/* Overall Conversion % */}
+        {/* Card 2: Conversion Rate */}
         <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-2xs space-y-1">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
@@ -384,14 +757,14 @@ export default function AdminOverviewDashboard() {
             </div>
           </div>
           <div className="text-2xl sm:text-3xl font-black text-emerald-600">
-            {loading ? '—' : formatPercentage(stats.conversionRate)}
+            {loading ? '—' : formatPercentage(computedData.conversionRate)}
           </div>
           <p className="text-[11px] text-slate-500 font-medium">
             Visitors converted into applicants
           </p>
         </div>
 
-        {/* Traffic & Views */}
+        {/* Card 3: Total Traffic */}
         <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-2xs space-y-1">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
@@ -402,14 +775,14 @@ export default function AdminOverviewDashboard() {
             </div>
           </div>
           <div className="text-2xl sm:text-3xl font-black text-[#00215C]">
-            {loading ? '—' : formatNumber(stats.totalViews)}
+            {loading ? '—' : formatNumber(computedData.totalViews)}
           </div>
           <p className="text-[11px] text-slate-500 font-medium">
-            {stats.totalStarts} assessments started
+            {computedData.totalStarts} assessments started
           </p>
         </div>
 
-        {/* Active Campaigns */}
+        {/* Card 4: Active Campaigns */}
         <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-2xs space-y-1">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
@@ -420,10 +793,10 @@ export default function AdminOverviewDashboard() {
             </div>
           </div>
           <div className="text-2xl sm:text-3xl font-black text-[#00215C]">
-            {loading ? '—' : stats.activePagesCount}
+            {loading ? '—' : activePages.length}
           </div>
           <p className="text-[11px] text-slate-500 font-medium">
-            Out of {stats.totalPagesCount} total pages
+            Out of {rawPages.length} total pages
           </p>
         </div>
       </div>
@@ -448,9 +821,9 @@ export default function AdminOverviewDashboard() {
 
           {/* Funnel Pipeline Steps */}
           {(() => {
-            const totalViews = stats.totalViews;
-            const totalEngaged = Math.max(stats.totalStarts, stats.totalLeads);
-            const totalLeads = stats.totalLeads;
+            const totalViews = computedData.totalViews;
+            const totalEngaged = Math.max(computedData.totalStarts, computedData.totalLeads);
+            const totalLeads = computedData.totalLeads;
 
             const engagementRate = totalViews > 0
               ? Math.min(100, Math.round((totalEngaged / totalViews) * 100))
@@ -528,13 +901,13 @@ export default function AdminOverviewDashboard() {
               </Link>
             </div>
 
-            {trafficChannels.length === 0 ? (
+            {computedData.trafficChannels.length === 0 ? (
               <div className="py-10 text-center text-xs text-slate-400">
-                No campaign traffic recorded yet.
+                No campaign traffic recorded matching current filters.
               </div>
             ) : (
               <div className="space-y-3 pt-3">
-                {trafficChannels.map((item, idx) => (
+                {computedData.trafficChannels.map((item, idx) => (
                   <div key={idx} className="space-y-1.5">
                     <div className="flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2">
@@ -563,7 +936,7 @@ export default function AdminOverviewDashboard() {
           <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
             <span>Total Attributed Leads</span>
             <span className="font-bold text-slate-900 font-mono">
-              {stats.totalLeads} {stats.totalLeads === 1 ? 'lead' : 'leads'}
+              {computedData.totalLeads} {computedData.totalLeads === 1 ? 'lead' : 'leads'}
             </span>
           </div>
         </div>
@@ -587,13 +960,13 @@ export default function AdminOverviewDashboard() {
             </Link>
           </div>
 
-          {pages.length === 0 ? (
+          {computedData.pages.length === 0 ? (
             <div className="py-8 text-center text-xs text-slate-400">
-              No pages published yet. Click "Build Page" to launch your first assessment.
+              No pages match the selected filters.
             </div>
           ) : (
             <div className="space-y-2">
-              {pages.slice(0, 5).map((page) => {
+              {computedData.pages.slice(0, 5).map((page) => {
                 const displayName = cleanPageName(page.name);
                 return (
                   <div
@@ -652,13 +1025,13 @@ export default function AdminOverviewDashboard() {
             </Link>
           </div>
 
-          {recentLeads.length === 0 ? (
+          {computedData.recentLeads.length === 0 ? (
             <div className="py-8 text-center text-xs text-slate-400">
-              No leads captured yet. Publish a page and share your ManyChat link to start collecting inquiries.
+              No applicant inquiries found for the selected filters.
             </div>
           ) : (
             <div className="space-y-2.5">
-              {recentLeads.map((lead) => (
+              {computedData.recentLeads.map((lead) => (
                 <div
                   key={lead.id}
                   className="p-3 bg-slate-50 hover:bg-slate-100/70 rounded-xl border border-slate-100 flex items-center justify-between gap-3 text-xs transition"

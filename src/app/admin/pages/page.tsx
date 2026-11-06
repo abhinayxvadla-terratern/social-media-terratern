@@ -34,6 +34,7 @@ import {
   Share2,
   Code2,
   Link2,
+  Eye,
 } from "lucide-react";
 import { getCachedData, setCachedData } from "@/lib/client-cache";
 import { cleanPageName } from "@/lib/vibe-engine";
@@ -112,7 +113,7 @@ export default function PagesManagementPage() {
       // Fetch stats from page_stats view
       const { data: statsData } = await supabase
         .from("page_stats")
-        .select("page_id, leads, conversion_percentage");
+        .select("page_id, views, leads, conversion_percentage");
 
       // Also fetch leads counts directly for 100% data reliability
       const { data: leadCountsData } = await supabase
@@ -128,10 +129,11 @@ export default function PagesManagementPage() {
         });
       }
 
-      const statsMap = new Map<string, { leads: number; conversion: number }>();
+      const statsMap = new Map<string, { views: number; leads: number; conversion: number }>();
       if (statsData) {
         statsData.forEach((s: any) => {
           statsMap.set(s.page_id, {
+            views: Number(s.views || 0),
             leads: Number(s.leads || 0),
             conversion: Number(s.conversion_percentage || 0),
           });
@@ -143,10 +145,12 @@ export default function PagesManagementPage() {
         const stat = statsMap.get(p.id);
         const directCount = directLeadMap.get(p.id) || 0;
         const finalLeads = Math.max(stat?.leads ?? 0, directCount);
+        const finalViews = Math.max(stat?.views ?? 0, finalLeads);
         return {
           ...p,
+          views_count: finalViews,
           leads_count: finalLeads,
-          conversion_percentage: stat?.conversion ?? (finalLeads > 0 ? 100 : 0),
+          conversion_percentage: stat?.conversion ?? (finalViews > 0 ? Number(((finalLeads / finalViews) * 100).toFixed(1)) : (finalLeads > 0 ? 100 : 0)),
         };
       });
 
@@ -671,10 +675,18 @@ export default function PagesManagementPage() {
                   </div>
 
                   {/* Middle: Metrics Bar */}
-                  <div className="grid grid-cols-2 gap-2 p-2.5 bg-slate-50 rounded-xl text-center">
+                  <div className="grid grid-cols-3 gap-2 p-2.5 bg-slate-50 rounded-xl text-center">
                     <div>
                       <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                        Leads Captured
+                        Traffic
+                      </span>
+                      <span className="text-sm font-black text-slate-800">
+                        {formatNumber(page.views_count || 0)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                        Leads
                       </span>
                       <span className="text-sm font-black text-slate-800">
                         {formatNumber(page.leads_count)}
@@ -682,7 +694,7 @@ export default function PagesManagementPage() {
                     </div>
                     <div>
                       <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                        Conversion Rate
+                        Conversion
                       </span>
                       <span className="text-sm font-black text-emerald-600">
                         {formatPercentage(page.conversion_percentage)}
@@ -756,6 +768,7 @@ export default function PagesManagementPage() {
                     </th>
                     <th className="py-3.5 px-4">Page</th>
                     <th className="py-3.5 px-4">Status</th>
+                    <th className="py-3.5 px-4 text-center">Traffic</th>
                     <th className="py-3.5 px-4 text-center">Leads</th>
                     <th className="py-3.5 px-4 text-center">Conversion Rate</th>
                     <th className="py-3.5 px-4 text-right">Actions</th>
@@ -855,7 +868,15 @@ export default function PagesManagementPage() {
                           )}
                         </td>
 
-                        {/* 4. Leads Captured */}
+                        {/* 4. Traffic / Page Views */}
+                        <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-extrabold text-xs font-mono">
+                            <Eye className="w-3.5 h-3.5 text-slate-400" />
+                            <span>{formatNumber(page.views_count || 0)}</span>
+                          </div>
+                        </td>
+
+                        {/* 5. Leads Captured */}
                         <td className="py-3.5 px-4 text-center whitespace-nowrap">
                           <span className="font-extrabold text-slate-900 text-sm font-mono">
                             {formatNumber(page.leads_count)}
