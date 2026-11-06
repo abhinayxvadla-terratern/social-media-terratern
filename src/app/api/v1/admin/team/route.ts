@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
 
   const formattedInvites = (invites || []).map((inv: any) => ({
     ...inv,
-    invite_link: `${origin}/admin/join?token=${inv.token}`,
+    invite_link: `${origin}/admin/join?token=${inv.token}&email=${encodeURIComponent(inv.email)}`,
   }));
 
   return NextResponse.json(
@@ -129,11 +129,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to create invite record: ' + insertErr.message }, { status: 500 });
   }
 
-  // 4. Build absolute invite link
+  // 4. Build absolute invite link with email prefilled
   const host = req.headers.get('host') || 'localhost:3000';
   const protocol = req.headers.get('x-forwarded-proto') || (host.includes('localhost') ? 'http' : 'https');
   const origin = req.headers.get('origin') || `${protocol}://${host}`;
-  const inviteLink = `${origin}/admin/join?token=${token}`;
+  const inviteLink = `${origin}/admin/join?token=${token}&email=${encodeURIComponent(cleanEmail)}`;
 
   return NextResponse.json({
     success: true,

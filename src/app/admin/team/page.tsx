@@ -502,11 +502,11 @@ export default function TeamManagementPage() {
         <Modal
           isOpen={true}
           onClose={handleCloseInviteModal}
-          title={createdInviteLink ? "Invitation Link Ready" : "Invite New Team Member"}
+          title={createdInviteLink ? "Account Creation Link Ready" : "Add Team Member"}
           description={
             createdInviteLink
-              ? "Share this secure link with your team member so they can set their password."
-              : "Generate an invite link for your team member to activate their account."
+              ? "Share this link with your team member to set their password and create their account."
+              : "Enter the email and role to generate an account creation link."
           }
         >
           {createdInviteLink ? (
@@ -514,17 +514,17 @@ export default function TeamManagementPage() {
               <div className="p-4 bg-emerald-50 border border-emerald-200/90 rounded-2xl space-y-2">
                 <div className="flex items-center gap-2 text-emerald-800 font-bold text-sm">
                   <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
-                  <span>Invite Link Generated!</span>
+                  <span>Account Creation Link Ready!</span>
                 </div>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Send this link to <strong className="text-slate-900">{inviteEmail}</strong>. When they open it, they will simply choose their password and gain <strong>{inviteRole}</strong> access.
+                  Send this link to <strong className="text-slate-900">{inviteEmail}</strong>. When opened, their email will be pre-filled and they will set their own password.
                 </p>
               </div>
 
               {/* Link Input & Copy Button */}
               <div className="space-y-1.5">
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                  Account Activation Link
+                  Account Creation Link
                 </label>
                 <div className="flex items-center gap-2">
                   <input
@@ -626,7 +626,7 @@ export default function TeamManagementPage() {
               </div>
 
               <div className="p-3 bg-blue-50/70 border border-blue-100 rounded-xl text-xs text-blue-800 leading-relaxed">
-                ℹ️ <strong>Instant Invite Link:</strong> Generates a secure invite link. The team member will simply open the link to set their own password and activate their account.
+                ℹ️ <strong>Account Creation Link:</strong> Generates a link with this email pre-filled. The team member will simply open the link to set their password.
               </div>
 
               <div className="flex justify-end gap-2.5 pt-2 border-t border-slate-100">
@@ -650,7 +650,7 @@ export default function TeamManagementPage() {
                   ) : (
                     <>
                       <Link2 className="w-3.5 h-3.5" />
-                      <span>Generate Invite Link</span>
+                      <span>Generate Account Link</span>
                     </>
                   )}
                 </button>

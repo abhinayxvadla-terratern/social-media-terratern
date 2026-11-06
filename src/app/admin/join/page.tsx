@@ -16,14 +16,19 @@ import {
   RefreshCw,
 } from 'lucide-react';
 
+export const dynamic = 'force-dynamic';
+
 function JoinTeamContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams.get('token')?.trim() || '';
+  const initialEmail = searchParams.get('email')?.trim() || '';
+
   const supabase = createClient();
 
   const [checking, setChecking] = useState(true);
-  const [inviteData, setInviteData] = useState<{ email: string; role: string } | null>(null);
+  const [email, setEmail] = useState(initialEmail);
+  const [role, setRole] = useState<string>('editor');
   const [error, setError] = useState<string | null>(null);
 
   const [password, setPassword] = useState('');
@@ -46,7 +51,8 @@ function JoinTeamContent() {
         const data = await res.json();
 
         if (res.ok && data.valid) {
-          setInviteData({ email: data.email, role: data.role });
+          if (data.email) setEmail(data.email);
+          if (data.role) setRole(data.role);
           setError(null);
         } else {
           setError(data.error || 'This invitation link is invalid or has expired.');
@@ -63,7 +69,7 @@ function JoinTeamContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!token || !inviteData) return;
+    if (!token) return;
 
     if (password.length < 6) {
       setError('Password must be at least 6 characters.');
@@ -87,28 +93,35 @@ function JoinTeamContent() {
 
       const data = await res.json();
       if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Failed to activate account.');
+        throw new Error(data.error || 'Failed to create account.');
       }
 
       setSuccess(true);
 
-      // Sign in automatically
+      const targetEmail = data.email || email;
+
+      // Clear any conflicting active session first
+      try {
+        await supabase.auth.signOut();
+      } catch {}
+
+      // Sign in with the newly created account
       const { error: loginError } = await supabase.auth.signInWithPassword({
-        email: inviteData.email,
+        email: targetEmail,
         password,
       });
 
       if (!loginError) {
         setTimeout(() => {
           router.push('/admin/pages');
-        }, 1200);
+        }, 1000);
       } else {
         setTimeout(() => {
-          router.push(`/admin/login?email=${encodeURIComponent(inviteData.email)}`);
-        }, 1500);
+          router.push(`/admin/login?email=${encodeURIComponent(targetEmail)}`);
+        }, 1200);
       }
     } catch (err: any) {
-      setError(err.message || 'An unexpected error occurred during account activation.');
+      setError(err.message || 'An unexpected error occurred during account creation.');
       setSubmitting(false);
     }
   };
@@ -120,7 +133,7 @@ function JoinTeamContent() {
         <div className="flex flex-col items-center text-center">
           <TerraTernLogo size="lg" variant="stacked" />
           <h2 className="mt-4 text-2xl font-black text-[#00215C] tracking-tight">
-            Create Your Password
+            Create Account
           </h2>
         </div>
 
@@ -129,9 +142,9 @@ function JoinTeamContent() {
           {checking ? (
             <div className="py-12 text-center space-y-3">
               <RefreshCw className="w-6 h-6 text-[#255CC1] animate-spin mx-auto" />
-              <p className="text-xs font-semibold text-slate-500">Verifying your invitation link...</p>
+              <p className="text-xs font-semibold text-slate-500">Loading your invitation...</p>
             </div>
-          ) : error && !inviteData ? (
+          ) : error && !email ? (
             <div className="space-y-4 py-4 text-center">
               <div className="w-12 h-12 rounded-full bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center mx-auto">
                 <AlertCircle className="w-6 h-6" />
@@ -160,21 +173,30 @@ function JoinTeamContent() {
               {success && (
                 <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2.5">
                   <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
-                  <span className="font-semibold">Password saved! Redirecting to dashboard...</span>
+                  <span className="font-semibold">Account created! Redirecting to your dashboard...</span>
                 </div>
               )}
 
-              {/* Invited Email & Role Banner */}
-              <div className="p-3 bg-blue-50/70 border border-blue-100 rounded-xl space-y-1">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-500 font-medium">Invited Account</span>
-                  <span className="font-bold text-blue-700 uppercase text-[10px] bg-blue-100/70 px-2 py-0.5 rounded">
-                    Role: {inviteData?.role}
+              {/* Email Address (Pre-filled by default from Admin invite) */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                    Email Address
+                  </label>
+                  <span className="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded uppercase">
+                    Role: {role}
                   </span>
                 </div>
-                <div className="font-bold text-slate-900 text-sm flex items-center gap-1.5 font-mono">
-                  <Mail className="w-3.5 h-3.5 text-blue-600" />
-                  <span>{inviteData?.email}</span>
+                <div className="relative">
+                  <input
+                    type="email"
+                    value={email}
+                    readOnly
+                    disabled
+                    aria-readonly="true"
+                    className="w-full pl-10 pr-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 cursor-not-allowed select-all"
+                  />
+                  <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3 pointer-events-none" />
                 </div>
               </div>
 
@@ -188,7 +210,7 @@ function JoinTeamContent() {
                     type={showPassword ? 'text' : 'password'}
                     required
                     minLength={6}
-                    placeholder="At least 6 characters"
+                    placeholder="Enter your password (min 6 characters)"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#255CC1] transition-all"
@@ -215,7 +237,7 @@ function JoinTeamContent() {
                     type={showPassword ? 'text' : 'password'}
                     required
                     minLength={6}
-                    placeholder="Re-enter your password"
+                    placeholder="Confirm your password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     className="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-[#255CC1] transition-all"
@@ -232,11 +254,11 @@ function JoinTeamContent() {
                 {submitting ? (
                   <>
                     <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Saving Password...</span>
+                    <span>Creating Account...</span>
                   </>
                 ) : (
                   <>
-                    <span>Set Password & Sign In</span>
+                    <span>Create Account</span>
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}
