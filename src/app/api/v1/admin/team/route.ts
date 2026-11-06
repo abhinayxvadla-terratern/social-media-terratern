@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { createClient } from '@/lib/supabase/server';
-import { getSupabaseServiceClient } from '@/lib/api-security';
 import { AdminRole } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -44,10 +43,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const serviceClient = getSupabaseServiceClient();
-
-  // Also retrieve active pending invitations
-  const { data: invites } = await serviceClient
+  // Also retrieve active pending invitations using authenticated client
+  const { data: invites } = await supabase
     .from('team_invites')
     .select('*')
     .is('accepted_at', null)
@@ -102,7 +99,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid role specified' }, { status: 400 });
   }
 
-  const serviceClient = getSupabaseServiceClient();
+  const supabase = await createClient();
   const cleanEmail = email.trim().toLowerCase();
 
   // 1. Generate unique secure invite token
@@ -110,14 +107,14 @@ export async function POST(req: NextRequest) {
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 days validity
 
   // 2. Invalidate any existing pending invites for this email
-  await serviceClient
+  await supabase
     .from('team_invites')
     .delete()
     .eq('email', cleanEmail)
     .is('accepted_at', null);
 
   // 3. Insert new invite record
-  const { data: newInvite, error: insertErr } = await serviceClient
+  const { data: newInvite, error: insertErr } = await supabase
     .from('team_invites')
     .insert({
       email: cleanEmail,
