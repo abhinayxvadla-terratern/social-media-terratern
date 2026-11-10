@@ -21,6 +21,7 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { getCachedData, setCachedData } from "@/lib/client-cache";
+import { ensureSinglePagePdf } from "@/lib/pdf-utils";
 
 export default function AssetsManagementPage() {
   const { userRole, canEdit } = useAdmin();
@@ -115,12 +116,18 @@ export default function AssetsManagementPage() {
         .replace(/-+/g, "-");
       const storagePath = `guides/${Date.now()}-${cleanFileName}.${fileExt}`;
 
+      // Pre-process: ensure single-page PDF if 2-page spillover
+      const rawBuffer = await uploadFile.arrayBuffer();
+      const processedBytes = await ensureSinglePagePdf(rawBuffer);
+      const uploadBlob = new Blob([processedBytes as unknown as BlobPart], { type: 'application/pdf' });
+
       // 2. Upload to Supabase Storage bucket 'pdfs'
       const { error: uploadError } = await supabase.storage
         .from("pdfs")
-        .upload(storagePath, uploadFile, {
+        .upload(storagePath, uploadBlob, {
           cacheControl: "3600",
           upsert: false,
+          contentType: "application/pdf",
         });
 
       if (uploadError) throw uploadError;

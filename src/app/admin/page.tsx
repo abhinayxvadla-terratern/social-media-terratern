@@ -37,15 +37,6 @@ import {
   SlidersHorizontal,
 } from 'lucide-react';
 
-interface TrafficChannelItem {
-  channel: string;
-  source: string;
-  count: number;
-  percentage: number;
-  color: string;
-  dotColor: string;
-}
-
 type TimeRange = 'all' | 'today' | '7d' | '30d' | 'this_month' | 'custom';
 type LeadTypeFilter = 'all' | 'complete' | 'partial';
 
@@ -189,7 +180,6 @@ export default function AdminOverviewDashboard() {
     pages: Page[];
     recentLeads: Lead[];
     stats: any;
-    trafficChannels?: TrafficChannelItem[];
   }>('admin_overview');
 
   const [loading, setLoading] = useState(() => !cached);
@@ -330,6 +320,8 @@ export default function AdminOverviewDashboard() {
       // Page filter (only active pages unless specific page selected)
       if (selectedPageId !== 'all') {
         if (lead.page_id !== selectedPageId) return false;
+      } else {
+        if (lead.page_id && !activePageIds.has(lead.page_id)) return false;
       }
 
       // Source filter
@@ -353,6 +345,8 @@ export default function AdminOverviewDashboard() {
       // Page filter
       if (selectedPageId !== 'all') {
         if (event.page_id !== selectedPageId) return false;
+      } else {
+        if (event.page_id && !activePageIds.has(event.page_id)) return false;
       }
 
       return true;
@@ -419,48 +413,7 @@ export default function AdminOverviewDashboard() {
     const activePagesCount = relevantPages.filter((p) => p.status === 'live').length;
     const totalPagesCount = relevantPages.length;
 
-    // 6. Traffic Channels Breakdown (strictly from active pages)
-    const channelCounts: Record<string, number> = {};
-    filteredLeads.forEach((lead) => {
-      if (lead.page_id && activePageIds.has(lead.page_id)) {
-        const info = getChannelInfo(lead.source);
-        channelCounts[info.label] = (channelCounts[info.label] || 0) + 1;
-      }
-    });
-
-    // If no leads yet, attribute from events on active pages
-    if (Object.keys(channelCounts).length === 0) {
-      filteredEvents.forEach((ev) => {
-        if (ev.page_id && activePageIds.has(ev.page_id)) {
-          const raw = (ev as any).meta?.source;
-          const info = getChannelInfo(raw || (ev.type === 'view' ? 'direct' : ''));
-          channelCounts[info.label] = (channelCounts[info.label] || 0) + 1;
-        }
-      });
-    }
-
-    if (Object.keys(channelCounts).length === 0 && totalLeads > 0) {
-      channelCounts['Direct / Organic'] = totalLeads;
-    }
-
-    const totalChanneled =
-      Object.values(channelCounts).reduce((a, b) => a + b, 0) || totalLeads || 1;
-
-    const trafficChannelsList: TrafficChannelItem[] = Object.entries(channelCounts)
-      .map(([channelLabel, count]) => {
-        const info = getChannelInfo(channelLabel);
-        return {
-          channel: channelLabel,
-          source: channelLabel,
-          count,
-          percentage: Math.round((count / totalChanneled) * 100),
-          color: info.color,
-          dotColor: info.dotColor,
-        };
-      })
-      .sort((a, b) => b.count - a.count);
-
-    // 7. Pages ranking with filtered stats
+    // 6. Pages ranking with filtered stats
     const pageLeadCounts = new Map<string, number>();
     filteredLeads.forEach((lead) => {
       if (lead.page_id) {
@@ -495,7 +448,6 @@ export default function AdminOverviewDashboard() {
       conversionRate,
       activePagesCount,
       totalPagesCount,
-      trafficChannels: trafficChannelsList,
       recentLeads: filteredLeads.slice(0, 6),
       pages: rankedPages,
     };
@@ -801,145 +753,86 @@ export default function AdminOverviewDashboard() {
         </div>
       </div>
 
-      {/* 3. Middle Grid: Funnel & Inbound Traffic Routing */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* Left: User Conversion Funnel (2 Cols) */}
-        <div className="lg:col-span-2 bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/80 shadow-2xs space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-base font-bold text-slate-900">Lead Generation Funnel</h2>
-              <p className="text-xs text-slate-500">Step-by-step visitor progression from view to qualification.</p>
-            </div>
-            <Link
-              href="/admin/traction"
-              className="text-xs font-bold text-[#255CC1] hover:underline flex items-center gap-1"
-            >
-              <span>Detailed Dropoffs</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
-          </div>
-
-          {/* Funnel Pipeline Steps */}
-          {(() => {
-            const totalViews = computedData.totalViews;
-            const totalEngaged = Math.max(computedData.totalStarts, computedData.totalLeads);
-            const totalLeads = computedData.totalLeads;
-
-            const engagementRate = totalViews > 0
-              ? Math.min(100, Math.round((totalEngaged / totalViews) * 100))
-              : (totalEngaged > 0 ? 100 : 0);
-
-            const leadConvRate = totalViews > 0
-              ? Math.min(100, Math.round((totalLeads / totalViews) * 100))
-              : (totalLeads > 0 ? 100 : 0);
-
-            return (
-              <div className="space-y-4 pt-2">
-                {/* Stage 1: Page Views */}
-                <div className="space-y-1.5">
-                  <div className="flex justify-between text-xs font-semibold">
-                    <span className="text-slate-700">1. Total Page Views</span>
-                    <span className="font-bold text-[#00215C] font-mono">{formatNumber(totalViews)} (100%)</span>
-                  </div>
-                  <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
-                    <div
-                      className="bg-[#00215C] h-full rounded-full transition-all duration-500"
-                      style={{ width: totalViews > 0 ? '100%' : '0%' }}
-                    />
-                  </div>
-                </div>
-
-                {/* Stage 2: Engaged Visitors */}
-                <div className="space-y-1.5">
-                  <div className="flex justify-between text-xs font-semibold">
-                    <span className="text-slate-700">2. Engaged Visitors</span>
-                    <span className="font-bold text-[#255CC1] font-mono">
-                      {formatNumber(totalEngaged)} ({engagementRate}%)
-                    </span>
-                  </div>
-                  <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
-                    <div
-                      className="bg-[#255CC1] h-full rounded-full transition-all duration-500"
-                      style={{ width: `${engagementRate}%` }}
-                    />
-                  </div>
-                </div>
-
-                {/* Stage 3: Verified Leads Captured */}
-                <div className="space-y-1.5">
-                  <div className="flex justify-between text-xs font-semibold">
-                    <span className="text-slate-700">3. Verified Leads Captured</span>
-                    <span className="font-bold text-emerald-600 font-mono">
-                      {formatNumber(totalLeads)} ({leadConvRate}%)
-                    </span>
-                  </div>
-                  <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
-                    <div
-                      className="bg-emerald-500 h-full rounded-full transition-all duration-500"
-                      style={{ width: `${leadConvRate}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
-        </div>
-
-        {/* Right: Real Inbound Traffic Channels */}
-        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/80 shadow-2xs space-y-4 flex flex-col justify-between">
+      {/* 3. Lead Generation Funnel */}
+      <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/80 shadow-2xs space-y-4">
+        <div className="flex items-center justify-between">
           <div>
-            <div className="flex items-center justify-between pb-1">
-              <div>
-                <h2 className="text-base font-bold text-slate-900">Traffic Channels</h2>
-                <p className="text-xs text-slate-500">Inbound source breakdown.</p>
-              </div>
-              <Link
-                href="/admin/leads"
-                className="text-xs font-bold text-[#255CC1] hover:underline"
-              >
-                View Leads &rarr;
-              </Link>
-            </div>
-
-            {computedData.trafficChannels.length === 0 ? (
-              <div className="py-10 text-center text-xs text-slate-400">
-                No campaign traffic recorded matching current filters.
-              </div>
-            ) : (
-              <div className="space-y-3 pt-3">
-                {computedData.trafficChannels.map((item, idx) => (
-                  <div key={idx} className="space-y-1.5">
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2">
-                        <span className={`w-2.5 h-2.5 rounded-full ${item.dotColor}`}></span>
-                        <span className="font-bold text-slate-800">{item.channel}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 font-mono text-xs">
-                        <span className="font-extrabold text-[#00215C]">
-                          {item.count} {item.count === 1 ? 'lead' : 'leads'}
-                        </span>
-                        <span className="text-slate-400 font-semibold">({item.percentage}%)</span>
-                      </div>
-                    </div>
-                    <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-500 ${item.color}`}
-                        style={{ width: `${Math.max(6, item.percentage)}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+            <h2 className="text-base font-bold text-slate-900">Lead Generation Funnel</h2>
+            <p className="text-xs text-slate-500">Step-by-step visitor progression from view to qualification.</p>
           </div>
-
-          <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-            <span>Total Attributed Leads</span>
-            <span className="font-bold text-slate-900 font-mono">
-              {computedData.totalLeads} {computedData.totalLeads === 1 ? 'lead' : 'leads'}
-            </span>
-          </div>
+          <Link
+            href="/admin/traction"
+            className="text-xs font-bold text-[#255CC1] hover:underline flex items-center gap-1"
+          >
+            <span>Detailed Dropoffs</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
         </div>
+
+        {/* Funnel Pipeline Steps */}
+        {(() => {
+          const totalViews = computedData.totalViews;
+          const totalEngaged = Math.max(computedData.totalStarts, computedData.totalLeads);
+          const totalLeads = computedData.totalLeads;
+
+          const engagementRate = totalViews > 0
+            ? Math.min(100, Math.round((totalEngaged / totalViews) * 100))
+            : (totalEngaged > 0 ? 100 : 0);
+
+          const leadConvRate = totalViews > 0
+            ? Math.min(100, Math.round((totalLeads / totalViews) * 100))
+            : (totalLeads > 0 ? 100 : 0);
+
+          return (
+            <div className="space-y-4 pt-2">
+              {/* Stage 1: Page Views */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-xs font-semibold">
+                  <span className="text-slate-700">1. Total Page Views</span>
+                  <span className="font-bold text-[#00215C] font-mono">{formatNumber(totalViews)} (100%)</span>
+                </div>
+                <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                  <div
+                    className="bg-[#00215C] h-full rounded-full transition-all duration-500"
+                    style={{ width: totalViews > 0 ? '100%' : '0%' }}
+                  />
+                </div>
+              </div>
+
+              {/* Stage 2: Engaged Visitors */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-xs font-semibold">
+                  <span className="text-slate-700">2. Engaged Visitors</span>
+                  <span className="font-bold text-[#255CC1] font-mono">
+                    {formatNumber(totalEngaged)} ({engagementRate}%)
+                  </span>
+                </div>
+                <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                  <div
+                    className="bg-[#255CC1] h-full rounded-full transition-all duration-500"
+                    style={{ width: `${engagementRate}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Stage 3: Verified Leads Captured */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-xs font-semibold">
+                  <span className="text-slate-700">3. Verified Leads Captured</span>
+                  <span className="font-bold text-emerald-600 font-mono">
+                    {formatNumber(totalLeads)} ({leadConvRate}%)
+                  </span>
+                </div>
+                <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+                  <div
+                    className="bg-emerald-500 h-full rounded-full transition-all duration-500"
+                    style={{ width: `${leadConvRate}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* 4. Bottom Grid: Top Pages Leaderboard & Live Leads Stream */}

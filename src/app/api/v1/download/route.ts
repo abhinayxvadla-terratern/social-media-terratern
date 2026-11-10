@@ -4,6 +4,7 @@ import {
   verifyDownloadToken,
   validateOriginAndCors,
 } from '@/lib/api-security';
+import { ensureSinglePagePdf } from '@/lib/pdf-utils';
 
 export async function OPTIONS(req: NextRequest) {
   const { corsHeaders } = validateOriginAndCors(req);
@@ -122,15 +123,17 @@ export async function GET(req: NextRequest) {
     }
 
     const fileBuffer = await upstreamRes.arrayBuffer();
+    // Automatically condense any 2-page spillover document to a clean single page
+    const processedBuffer = await ensureSinglePagePdf(fileBuffer);
     const cleanFileName = fileName.replace(/[^a-zA-Z0-9_\-\. ]/g, '').trim().replace(/\s+/g, '_') || 'TerraTern-Report';
     const finalFileName = cleanFileName.toLowerCase().endsWith('.pdf') ? cleanFileName : `${cleanFileName}.pdf`;
 
-    return new NextResponse(fileBuffer, {
+    return new NextResponse(Buffer.from(processedBuffer), {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="${finalFileName}"`,
-        'Content-Length': String(fileBuffer.byteLength),
+        'Content-Length': String(processedBuffer.byteLength),
         'Cache-Control': 'public, max-age=3600, s-maxage=3600',
       },
     });
