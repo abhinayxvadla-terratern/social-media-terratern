@@ -9,11 +9,11 @@ import { AdminHeader } from '@/components/layout/AdminHeader';
 
 function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isLoginPage = pathname === '/admin/login';
+  const isAuthPage = pathname === '/admin/login' || pathname === '/admin/join';
   const isBuildPage = pathname === '/admin/pages/build';
   const { user, userRole, signOut } = useAdmin();
 
-  if (isLoginPage) {
+  if (isAuthPage) {
     return <>{children}</>;
   }
 

@@ -56,11 +56,16 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const toggleSidebar = () => setSidebarCollapsed((prev) => !prev);
 
-  const isLoginPage = pathname === '/admin/login';
+  const isAuthPage = pathname === '/admin/login' || pathname === '/admin/join';
   const initialLoadedRef = React.useRef(false);
 
   const fetchAdminData = async (isInitial = false) => {
     try {
+      if (isAuthPage) {
+        setLoading(false);
+        return;
+      }
+
       if (isInitial && !initialLoadedRef.current) {
         setLoading(true);
       }
@@ -71,7 +76,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       if (!currentUser) {
         setUser(null);
         setIsAuthorized(false);
-        if (!isLoginPage) {
+        if (!isAuthPage) {
           router.push(`/admin/login?redirect=${encodeURIComponent(pathname)}`);
         }
         return;
@@ -126,7 +131,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
       if (event === 'SIGNED_OUT') {
         setUser(null);
         setIsAuthorized(false);
-        if (!isLoginPage) router.push('/admin/login');
+        if (!isAuthPage) router.push('/admin/login');
       } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
         if (session?.user) {
           setUser(session.user);
@@ -160,7 +165,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
     setIsKillSwitchActive(newState);
   };
 
-  if (isLoginPage) {
+  if (isAuthPage) {
     return <>{children}</>;
   }
 
