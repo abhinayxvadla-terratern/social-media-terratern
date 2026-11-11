@@ -131,19 +131,50 @@ BEGIN
   WHERE lower(email) = v_clean_email;
 
   IF v_existing_id IS NOT NULL THEN
-    -- Update password and ensure email is confirmed
+    -- Update password and ensure all tokens are non-null strings to prevent GoTrue scanning crashes
     UPDATE auth.users
     SET encrypted_password = extensions.crypt(p_password, extensions.gen_salt('bf', 10)),
         email_confirmed_at = COALESCE(email_confirmed_at, now()),
+        confirmation_token = COALESCE(confirmation_token, ''),
+        recovery_token = COALESCE(recovery_token, ''),
+        email_change_token_new = COALESCE(email_change_token_new, ''),
+        email_change = COALESCE(email_change, ''),
+        phone_change = COALESCE(phone_change, ''),
+        phone_change_token = COALESCE(phone_change_token, ''),
+        reauthentication_token = COALESCE(reauthentication_token, ''),
+        email_change_token_current = COALESCE(email_change_token_current, ''),
         updated_at = now()
     WHERE id = v_existing_id;
 
     v_user_id := v_existing_id;
+
+    -- Ensure identity exists
+    INSERT INTO auth.identities (
+      id,
+      provider_id,
+      user_id,
+      identity_data,
+      provider,
+      last_sign_in_at,
+      created_at,
+      updated_at
+    ) VALUES (
+      gen_random_uuid(),
+      v_user_id::text,
+      v_user_id,
+      jsonb_build_object('sub', v_user_id::text, 'email', v_clean_email, 'email_verified', true),
+      'email',
+      now(),
+      now(),
+      now()
+    )
+    ON CONFLICT (provider_id, provider) DO NOTHING;
+
   ELSE
     -- Generate new user id
     v_user_id := gen_random_uuid();
 
-    -- Insert new user into auth.users
+    -- Insert new user into auth.users with non-null string token fields
     INSERT INTO auth.users (
       instance_id,
       id,
@@ -152,8 +183,18 @@ BEGIN
       email,
       encrypted_password,
       email_confirmed_at,
+      confirmation_token,
+      recovery_token,
+      email_change_token_new,
+      email_change,
+      phone_change,
+      phone_change_token,
+      reauthentication_token,
+      email_change_token_current,
       raw_app_meta_data,
       raw_user_meta_data,
+      is_sso_user,
+      is_anonymous,
       created_at,
       updated_at
     ) VALUES (
@@ -164,8 +205,18 @@ BEGIN
       v_clean_email,
       extensions.crypt(p_password, extensions.gen_salt('bf', 10)),
       now(),
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
       '{"provider":"email","providers":["email"]}'::jsonb,
       '{"email_verified":true}'::jsonb,
+      false,
+      false,
       now(),
       now()
     );
@@ -189,7 +240,8 @@ BEGIN
       now(),
       now(),
       now()
-    );
+    )
+    ON CONFLICT (provider_id, provider) DO NOTHING;
   END IF;
 
   -- 4. Register / Update role in public.admin_users

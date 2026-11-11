@@ -5,6 +5,35 @@ import { AdminRole } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
+// Helper to determine the public base URL for invite links
+function getBaseUrl(req: NextRequest): string {
+  const envUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL;
+  if (envUrl) {
+    return envUrl.replace(/\/+$/, '');
+  }
+
+  const host = req.headers.get('host') || '';
+  const origin = req.headers.get('origin') || '';
+
+  // If running on localhost or 127.0.0.1, fallback to live production domain
+  // so that shared invite links can be opened by teammates anywhere
+  if (
+    host.includes('localhost') ||
+    host.includes('127.0.0.1') ||
+    origin.includes('localhost') ||
+    origin.includes('127.0.0.1')
+  ) {
+    return 'https://social-media-terratern.vercel.app';
+  }
+
+  if (origin) {
+    return origin.replace(/\/+$/, '');
+  }
+
+  const protocol = req.headers.get('x-forwarded-proto') || 'https';
+  return `${protocol}://${host}`.replace(/\/+$/, '');
+}
+
 // Helper to check caller is owner
 async function requireOwner() {
   const supabase = await createClient();
@@ -51,13 +80,11 @@ export async function GET(req: NextRequest) {
     .gt('expires_at', new Date().toISOString())
     .order('created_at', { ascending: false });
 
-  const host = req.headers.get('host') || 'localhost:3000';
-  const protocol = req.headers.get('x-forwarded-proto') || (host.includes('localhost') ? 'http' : 'https');
-  const origin = req.headers.get('origin') || `${protocol}://${host}`;
+  const baseUrl = getBaseUrl(req);
 
   const formattedInvites = (invites || []).map((inv: any) => ({
     ...inv,
-    invite_link: `${origin}/admin/join?token=${inv.token}&email=${encodeURIComponent(inv.email)}`,
+    invite_link: `${baseUrl}/admin/join?token=${inv.token}&email=${encodeURIComponent(inv.email)}`,
   }));
 
   return NextResponse.json(
@@ -130,10 +157,8 @@ export async function POST(req: NextRequest) {
   }
 
   // 4. Build absolute invite link with email prefilled
-  const host = req.headers.get('host') || 'localhost:3000';
-  const protocol = req.headers.get('x-forwarded-proto') || (host.includes('localhost') ? 'http' : 'https');
-  const origin = req.headers.get('origin') || `${protocol}://${host}`;
-  const inviteLink = `${origin}/admin/join?token=${token}&email=${encodeURIComponent(cleanEmail)}`;
+  const baseUrl = getBaseUrl(req);
+  const inviteLink = `${baseUrl}/admin/join?token=${token}&email=${encodeURIComponent(cleanEmail)}`;
 
   return NextResponse.json({
     success: true,
