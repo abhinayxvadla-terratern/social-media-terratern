@@ -4,7 +4,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { TerraTernLogo } from '../ui/TerraTernLogo';
 import { RoleBadge } from '../ui/Badge';
 import { AdminRole } from '@/lib/types';
-import { LogOut, User, ChevronDown } from 'lucide-react';
+import { LogOut, User, ChevronDown, KeyRound } from 'lucide-react';
+import { ChangePasswordModal } from '@/components/auth/ChangePasswordModal';
 
 interface AdminHeaderProps {
   title?: string;
@@ -19,6 +20,7 @@ export function AdminHeader({
   onSignOut,
 }: AdminHeaderProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const initial = userEmail ? userEmail.charAt(0).toUpperCase() : 'U';
@@ -86,6 +88,18 @@ export function AdminHeader({
                 type="button"
                 onClick={() => {
                   setDropdownOpen(false);
+                  setPasswordModalOpen(true);
+                }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-slate-700 hover:bg-slate-50 rounded-xl text-xs font-bold transition mb-1"
+              >
+                <KeyRound className="w-3.5 h-3.5 text-[#255CC1]" />
+                <span>Change Password</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setDropdownOpen(false);
                   onSignOut();
                 }}
                 className="w-full flex items-center gap-2 px-3 py-2 text-rose-600 hover:bg-rose-50 rounded-xl text-xs font-bold transition"
@@ -97,6 +111,12 @@ export function AdminHeader({
           )}
         </div>
       </div>
+
+      <ChangePasswordModal
+        isOpen={passwordModalOpen}
+        onClose={() => setPasswordModalOpen(false)}
+        userEmail={userEmail}
+      />
     </header>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -11,11 +11,13 @@ import {
   FolderDown,
   LogOut,
   ShieldCheck,
+  KeyRound,
 } from 'lucide-react';
 import { TerraTernLogo } from '../ui/TerraTernLogo';
 import { RoleBadge } from '../ui/Badge';
 import { AdminRole } from '@/lib/types';
 import { useAdmin } from '@/contexts/AdminContext';
+import { ChangePasswordModal } from '@/components/auth/ChangePasswordModal';
 
 interface AdminSidebarProps {
   userEmail?: string;
@@ -32,6 +34,7 @@ export function AdminSidebar({
 }: AdminSidebarProps) {
   const pathname = usePathname();
   const { sidebarCollapsed } = useAdmin();
+  const [passwordModalOpen, setPasswordModalOpen] = useState(false);
 
   if (forceCollapse || sidebarCollapsed) {
     return null;
@@ -129,16 +132,34 @@ export function AdminSidebar({
               <RoleBadge role={userRole} />
             </div>
           </div>
-          <button
-            onClick={onSignOut}
-            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
-            title="Sign Out"
-            aria-label="Sign out"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-0.5">
+            <button
+              type="button"
+              onClick={() => setPasswordModalOpen(true)}
+              className="p-1.5 text-slate-400 hover:text-[#255CC1] hover:bg-blue-50 rounded-lg transition"
+              title="Change Password"
+              aria-label="Change password"
+            >
+              <KeyRound className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={onSignOut}
+              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+              title="Sign Out"
+              aria-label="Sign out"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
+
+      <ChangePasswordModal
+        isOpen={passwordModalOpen}
+        onClose={() => setPasswordModalOpen(false)}
+        userEmail={userEmail}
+      />
     </aside>
   );
 }

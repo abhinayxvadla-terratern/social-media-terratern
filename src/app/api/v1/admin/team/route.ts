@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { createClient } from '@/lib/supabase/server';
+import { getSupabaseServiceClient } from '@/lib/api-security';
 import { AdminRole } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -171,7 +172,7 @@ export async function POST(req: NextRequest) {
   });
 }
 
-// PATCH /api/v1/admin/team - Update role (Owner only)
+// PATCH /api/v1/admin/team - Update role or password (Owner only)
 export async function PATCH(req: NextRequest) {
   const auth = await requireOwner();
   if (!auth.authorized) {
@@ -185,51 +186,80 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const { user_id, role } = body || {};
-  if (!user_id || !role) {
-    return NextResponse.json({ error: 'user_id and role are required' }, { status: 400 });
+  const { user_id, role, password } = body || {};
+  if (!user_id) {
+    return NextResponse.json({ error: 'user_id is required' }, { status: 400 });
   }
 
-  const validRoles: AdminRole[] = ['owner', 'editor', 'viewer'];
-  if (!validRoles.includes(role)) {
-    return NextResponse.json({ error: 'Invalid role specified' }, { status: 400 });
+  let message = '';
+
+  // 1. If updating password directly
+  if (password) {
+    if (typeof password !== 'string' || password.length < 6) {
+      return NextResponse.json({ error: 'Password must be at least 6 characters in length' }, { status: 400 });
+    }
+
+    const serviceClient = getSupabaseServiceClient();
+    const { error: pwdErr } = await serviceClient.auth.admin.updateUserById(user_id, {
+      password,
+    });
+
+    if (pwdErr) {
+      return NextResponse.json({ error: 'Failed to update user password: ' + pwdErr.message }, { status: 500 });
+    }
+
+    message = 'Password updated successfully!';
   }
 
-  const supabase = await createClient();
+  // 2. If updating role
+  if (role) {
+    const validRoles: AdminRole[] = ['owner', 'editor', 'viewer'];
+    if (!validRoles.includes(role)) {
+      return NextResponse.json({ error: 'Invalid role specified' }, { status: 400 });
+    }
 
-  // If demoting an owner, verify there is at least one other owner
-  if (role !== 'owner') {
-    const { count } = await supabase
-      .from('admin_users')
-      .select('*', { count: 'exact', head: true })
-      .eq('role', 'owner');
+    const supabase = await createClient();
 
-    if ((count || 0) <= 1) {
-      const { data: target } = await supabase
+    // If demoting an owner, verify there is at least one other owner
+    if (role !== 'owner') {
+      const { count } = await supabase
         .from('admin_users')
-        .select('role')
-        .eq('user_id', user_id)
-        .maybeSingle();
+        .select('*', { count: 'exact', head: true })
+        .eq('role', 'owner');
 
-      if (target?.role === 'owner') {
-        return NextResponse.json(
-          { error: 'Cannot demote the last remaining owner account' },
-          { status: 400 }
-        );
+      if ((count || 0) <= 1) {
+        const { data: target } = await supabase
+          .from('admin_users')
+          .select('role')
+          .eq('user_id', user_id)
+          .maybeSingle();
+
+        if (target?.role === 'owner') {
+          return NextResponse.json(
+            { error: 'Cannot demote the last remaining owner account' },
+            { status: 400 }
+          );
+        }
       }
     }
+
+    const { error: updateErr } = await supabase
+      .from('admin_users')
+      .update({ role })
+      .eq('user_id', user_id);
+
+    if (updateErr) {
+      return NextResponse.json({ error: updateErr.message }, { status: 500 });
+    }
+
+    message = message ? `${message} and role updated to ${role}` : `Role updated to ${role}`;
   }
 
-  const { error: updateErr } = await supabase
-    .from('admin_users')
-    .update({ role })
-    .eq('user_id', user_id);
-
-  if (updateErr) {
-    return NextResponse.json({ error: updateErr.message }, { status: 500 });
+  if (!message) {
+    return NextResponse.json({ error: 'Please specify a role or password to update' }, { status: 400 });
   }
 
-  return NextResponse.json({ success: true, message: `Role updated to ${role}` });
+  return NextResponse.json({ success: true, message });
 }
 
 // DELETE /api/v1/admin/team - Remove member (Owner only)

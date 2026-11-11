@@ -12,6 +12,8 @@ import {
   Eye,
   EyeOff,
   RefreshCw,
+  KeyRound,
+  X,
 } from "lucide-react";
 
 function LoginForm() {
@@ -25,6 +27,7 @@ function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showForgotModal, setShowForgotModal] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -136,6 +139,16 @@ function LoginForm() {
               </div>
             </div>
 
+            <div className="flex items-center justify-end">
+              <button
+                type="button"
+                onClick={() => setShowForgotModal(true)}
+                className="text-xs font-semibold text-[#255CC1] hover:underline"
+              >
+                Forgot password?
+              </button>
+            </div>
+
             <button
               type="submit"
               disabled={loading || !email.trim() || !password}
@@ -156,6 +169,49 @@ function LoginForm() {
           </form>
         </div>
       </div>
+
+      {/* Forgot Password Modal */}
+      {showForgotModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="relative w-full max-w-sm bg-white rounded-2xl shadow-2xl border border-slate-200/90 overflow-hidden p-6 space-y-4">
+            <div className="flex items-start justify-between">
+              <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-200/80 text-[#00215C] flex items-center justify-center">
+                <KeyRound className="w-5 h-5 text-[#255CC1]" />
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowForgotModal(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div>
+              <h3 className="text-base font-bold text-slate-900">Forgot your password?</h3>
+              <p className="text-xs text-slate-600 mt-2 leading-relaxed">
+                For security, account credentials are managed directly by your organization's administrator.
+              </p>
+              <div className="mt-3 p-3 bg-slate-50 border border-slate-100 rounded-xl text-xs space-y-1">
+                <span className="font-semibold text-slate-800 block">How to reset:</span>
+                <p className="text-slate-600 leading-relaxed">
+                  Please reach out to your team owner (<strong className="text-slate-900">abhinay.vadla@terratern.com</strong>) to receive a secure, one-time account setup link.
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setShowForgotModal(false)}
+                className="w-full py-2.5 bg-[#00215C] hover:bg-[#255CC1] text-white text-xs font-bold rounded-xl transition"
+              >
+                Understood
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
