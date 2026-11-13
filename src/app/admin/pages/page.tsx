@@ -38,6 +38,7 @@ import {
 } from "lucide-react";
 import { getCachedData, setCachedData } from "@/lib/client-cache";
 import { cleanPageName } from "@/lib/vibe-engine";
+import { ConnectPageModal } from "@/components/ui/ConnectPageModal";
 
 export default function PagesManagementPage() {
   const { userRole, canEdit, isOwner } = useAdmin();
@@ -58,6 +59,7 @@ export default function PagesManagementPage() {
   const [isBulkActionLoading, setIsBulkActionLoading] = useState(false);
 
   // Modals & State
+  const [connectModalOpen, setConnectModalOpen] = useState(false);
   const [editingPage, setEditingPage] = useState<Page | null>(null);
   const [deleteConfirmPage, setDeleteConfirmPage] = useState<Page | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -192,6 +194,26 @@ export default function PagesManagementPage() {
   }, [pages, search, statusFilter]);
 
   const existingSlugs = useMemo(() => pages.map((p) => p.slug), [pages]);
+
+  const handleConnectPageSave = async (newPagePayload: Partial<Page>): Promise<Page> => {
+    const { data, error } = await supabase
+      .from("pages")
+      .insert(newPagePayload)
+      .select("*, pdf_asset:assets(*)")
+      .single();
+
+    if (error) throw error;
+
+    const pageWithCounts: Page = {
+      ...data,
+      leads_count: 0,
+      views_count: 0,
+      conversion_percentage: 0,
+    };
+
+    setPages((prev) => [pageWithCounts, ...prev]);
+    return pageWithCounts;
+  };
 
   // Copy to clipboard helper
   const handleCopy = (text: string, id: string) => {
@@ -492,9 +514,17 @@ export default function PagesManagementPage() {
           </select>
         </div>
 
-        {/* Action Button: Build Page */}
+        {/* Action Buttons: Connect External Page & Build Page */}
         {canEdit && (
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setConnectModalOpen(true)}
+              className="px-4 py-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold text-xs sm:text-sm rounded-xl transition shadow-2xs flex items-center justify-center gap-2"
+            >
+              <Link2 className="w-4 h-4 text-[#255CC1]" />
+              <span>Connect External Page</span>
+            </button>
             <a
               href="/admin/pages/build"
               className="px-4 py-2.5 bg-[#00215C] hover:bg-[#255CC1] active:scale-95 text-white font-bold text-xs sm:text-sm rounded-xl transition shadow-xs flex items-center justify-center gap-2"
@@ -1715,6 +1745,14 @@ export default function PagesManagementPage() {
           </div>
         </Modal>
       )}
+
+      {/* Connect External Page Modal */}
+      <ConnectPageModal
+        isOpen={connectModalOpen}
+        onClose={() => setConnectModalOpen(false)}
+        existingSlugs={existingSlugs}
+        onSavePage={handleConnectPageSave}
+      />
     </div>
   );
 }
