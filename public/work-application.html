@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Job Application</title>
+<meta name="description" content="Apply in 4 short steps. Shortlisted candidates will be contacted for the next steps.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --primary:#255CC1;--primary-h:#3077E0;--navy:#00215C;--ink:#0E0E2C;--text:#4A4A68;
+  --n50:#FAFAFA;--n100:#E7E7E7;--n200:#D1D1D1;--n300:#B0B0B0;--n500:#707070;
+  --p10:#FAFBFF;--p50:#F0F7FE;--p100:#DDEDFC;--p200:#C3E0FA;--p300:#99CEF7;
+  --ok:#228024;--ok-d:#1E5D20;--ok50:#F2FCF1;--ok100:#DFF9DF;
+  --warn:#FF8000;--accent:#F1C819;--accent50:rgba(241,200,25,.18);--accent-d:#6b5300;
+  --danger:#DB2A2A;--danger50:#FEF2F2;
+  --f-head:Poppins,"Segoe UI",system-ui,-apple-system,Roboto,sans-serif;
+  --f-body:Roboto,"Segoe UI",system-ui,-apple-system,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font-family:var(--f-body);color:var(--text);background:#fff;overflow:hidden;-webkit-font-smoothing:antialiased}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--primary-h);outline-offset:2px}
+
+.app{height:100vh;height:100dvh;display:grid;grid-template-rows:auto minmax(0,1fr) auto;
+  background:radial-gradient(1100px 560px at 50% 38%,#EAF3FE 0%,#C3E0FA 100%)}
+
+/* header + footer */
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 clamp(16px,5vw,60px);height:52px;background:#fff;border-bottom:1px solid var(--n100)}
+.brand{font-family:var(--f-head);font-weight:600;font-size:20px;letter-spacing:-.02em;color:var(--navy)}
+.brand b{color:var(--primary);font-weight:600}
+.tag{font-size:13px;color:var(--text);white-space:nowrap}
+.foot{display:flex;justify-content:space-between;gap:12px;padding:10px clamp(16px,5vw,60px);background:var(--navy);color:#fff;font-size:12px;line-height:1.3}
+.foot span:last-child{opacity:.85;text-align:right}
+
+/* stage */
+.stage{min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:clamp(8px,2vh,24px) clamp(12px,4vw,24px);gap:clamp(8px,2vh,20px)}
+.intro,.card{width:min(1000px,100%)}
+.intro{display:flex;flex-direction:column;gap:6px;align-items:flex-start;padding:0 clamp(0px,2vw,28px)}
+.pill{display:inline-flex;align-items:center;gap:8px;background:var(--navy);color:#fff;font-family:var(--f-head);font-weight:500;font-size:13px;padding:6px 14px;border-radius:100px}
+.intro h1{margin:2px 0 0;font-family:var(--f-head);font-weight:600;letter-spacing:-.02em;color:var(--ink);font-size:clamp(22px,3.4vw,38px);line-height:1.15}
+.intro p{margin:0;font-size:clamp(13px,1.6vw,16px);color:var(--text)}
+
+.card{background:#fff;border-radius:28px;box-shadow:0 20px 60px rgba(0,33,92,.14);padding:clamp(16px,3vh,32px) clamp(16px,3.6vw,36px);min-height:0;max-height:100%;overflow:auto;position:relative}
+.card.enter>*{animation:rise .22s ease both}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+.stepline{font-size:12px;letter-spacing:.06em;text-transform:uppercase;font-weight:500;color:var(--text)}
+.stepline b{color:var(--navy);font-weight:600}
+.bar{display:flex;gap:10px;margin:8px 0 clamp(10px,2vh,18px)}
+.bar i{flex:1;max-width:128px;height:8px;border-radius:8px;background:var(--p100);transition:background .3s}
+.bar i.on{background:var(--primary)}
+h2.q{margin:0;font-family:var(--f-head);font-weight:600;letter-spacing:-.02em;color:var(--navy);font-size:clamp(17px,2.4vw,24px);line-height:1.3}
+.why{margin:4px 0 clamp(10px,2vh,16px);font-size:clamp(12.5px,1.4vw,14px);color:var(--text)}
+
+.opts{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+.opts.cards{grid-template-columns:repeat(4,1fr)}
+.tile{position:relative;display:flex;align-items:center;gap:12px;text-align:left;background:#fff;border:1.5px solid transparent;border-radius:12px;padding:14px 16px;min-height:56px;box-shadow:0 2px 12px rgba(0,33,92,.09);font-family:var(--f-head);font-weight:500;font-size:15px;line-height:1.3;color:var(--navy);transition:border-color .15s,background .15s,transform .15s,box-shadow .15s}
+.tile:hover{border-color:var(--p200);transform:translateY(-1px)}
+.tile.sel{border-color:var(--primary);background:var(--p50);box-shadow:0 4px 16px rgba(37,92,193,.18)}
+.tile .tick{margin-left:auto;flex:none;width:22px;height:22px;border-radius:50%;border:1.5px solid var(--n200);display:grid;place-items:center;color:#fff;transition:all .15s}
+.tile.sel .tick{background:var(--primary);border-color:var(--primary)}
+.tile .tick svg{width:12px;height:12px;opacity:0}
+.tile.sel .tick svg{opacity:1}
+.opts.cards .tile{flex-direction:column;align-items:flex-start;gap:8px;padding:16px;min-height:132px}
+.opts.cards .tile .ic{width:38px;height:38px;border-radius:10px;background:var(--p100);color:var(--primary);display:grid;place-items:center}
+.opts.cards .tile .ic svg{width:22px;height:22px}
+.opts.cards .tile small{display:block;font-family:var(--f-body);font-weight:400;font-size:13px;color:var(--text);margin-top:2px}
+.opts.cards .tile .tick{position:absolute;top:12px;right:12px;margin:0}
+.opts.multi .tile .tick{border-radius:6px}
+
+.hint{min-height:22px;margin:10px 2px 0;font-size:13.5px;color:var(--primary);display:flex;align-items:center;gap:6px}
+.hint svg{width:15px;height:15px;flex:none}
+.actions{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:clamp(6px,1.4vh,14px)}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:48px;padding:0 24px;border-radius:12px;border:0;font-family:var(--f-head);font-weight:500;font-size:16px;transition:background .15s,transform .1s}
+.btn.primary{background:var(--primary);color:#fff}
+.btn.primary:hover{background:var(--primary-h)}
+.btn.primary:active{transform:scale(.98)}
+.btn.primary:disabled{background:var(--n100);color:var(--n300);cursor:not-allowed}
+.btn.tert{background:transparent;color:var(--primary);padding:0 12px}
+.btn.tert:hover{background:var(--p50)}
+.btn.wide{min-width:220px}
+.btn.green{background:#25D366;color:#073b1c}
+
+/* candidate application */
+.card.cform{align-items:center}
+.card.cform .fpane{width:min(520px,100%)}
+.cform .fpane h3{margin:0 0 10px;font-family:var(--f-head);font-weight:600;font-size:clamp(18px,2.6vw,22px);color:var(--navy);letter-spacing:-.02em}
+.cform .bar{margin:6px 0 10px}
+.cform .fld{margin-bottom:9px}
+.cform .actions{margin-top:12px}
+.cform .btn.primary{min-width:140px}
+.hint{margin:4px 0 0;font-size:12px;color:var(--primary);font-weight:500}
+.hint:empty{display:none}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.yn{display:flex;gap:10px}
+.yn button{flex:1;height:44px;border-radius:10px;border:1.5px solid var(--n200);background:#fff;font:500 15px var(--f-body);color:var(--ink);cursor:pointer}
+.yn button.sel{border-color:var(--primary);background:var(--p50);color:var(--primary);font-weight:600}
+select.in{padding:0 8px}
+.money{position:relative}
+.money span{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--n500);font-size:15px}
+.money .in{padding-left:28px}
+.drop{display:flex;align-items:center;justify-content:center;min-height:96px;border:2px dashed var(--p200);border-radius:14px;background:var(--p50);cursor:pointer;text-align:center;padding:12px;font-size:14px;color:var(--text)}
+.drop.over{border-color:var(--primary);background:var(--p100)}
+.drop b{color:var(--primary)}
+.fchip{display:flex;flex-direction:column;align-items:flex-start;text-align:left;word-break:break-all}
+.fchip b{color:var(--navy)}.fchip small{color:var(--n500)}
+.dtxt{display:flex;align-items:center;gap:14px;justify-content:center;flex-wrap:wrap}
+.rm{border:0;background:transparent;color:var(--danger);font:500 13px var(--f-body);cursor:pointer;text-decoration:underline}
+.sug{border:0;background:none;color:var(--primary);font:600 12px var(--f-body);text-decoration:underline;cursor:pointer;padding:0}
+@media (max-height:700px){.cform .fld{margin-bottom:6px}.cform .in,.yn button{height:40px}.cform .fpane h3{margin-bottom:6px}.drop{min-height:78px}.cform .actions .btn{height:42px}.consent{font-size:11.5px;margin:4px 0 8px}}
+
+.app{grid-template-rows:minmax(0,1fr)}
+
+/* welcome screen */
+.card.welcome{display:flex;align-items:center;justify-content:center}
+.wel{display:flex;flex-direction:column;align-items:flex-start;gap:12px;max-width:560px;padding:8px 0}
+.wel h1{margin:0;font-family:var(--f-head);font-weight:600;letter-spacing:-.02em;color:var(--ink);font-size:clamp(28px,5vw,44px);line-height:1.1}
+.wel .wsub{margin:0;font-size:clamp(14px,1.8vw,17px);color:var(--text)}
+.wel .btn{min-width:180px}
+
+/* thank-you page */
+.road{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:12px;position:relative;text-align:left}
+.road li{display:flex;gap:12px;align-items:flex-start;position:relative}
+.road li:not(:last-child)::before{content:'';position:absolute;left:12px;top:26px;bottom:-12px;width:2px;background:#C9DCF5}
+.road .dot{flex:none;width:26px;height:26px;border-radius:50%;background:#fff;border:2px solid var(--primary);color:var(--primary);display:grid;place-items:center;font:600 12px var(--f-head);z-index:1}
+.road .rt{display:flex;flex-direction:column;font-size:14.5px;line-height:1.3;color:var(--text)}
+.road .rt b{color:var(--navy);font-size:14.5px}
+.bigtick{width:56px;height:56px;margin:0 0 4px}.bigtick svg{width:28px;height:28px}
+.ico.ok{background:var(--ok100);color:var(--ok-d)}
+.ico{flex:none;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;margin-top:1px}
+.in{width:100%;height:44px;border:1.5px solid var(--n200);border-radius:10px;padding:0 12px;background:#fff;font-size:15px;color:var(--ink);transition:border-color .15s,box-shadow .15s}
+.in:focus{outline:0;border-color:var(--primary);box-shadow:0 0 0 3px var(--p100)}
+.in.bad{border-color:var(--danger);background:var(--danger50)}
+.phone{display:flex;gap:8px}
+.phone select.in{width:128px;flex:none;padding:0 6px}
+.err{min-height:0;margin:4px 0 0;font-size:12px;color:var(--danger)}
+.err:empty{display:none}
+.consent{display:flex;gap:10px;align-items:flex-start;font-size:12px;line-height:1.4;margin:6px 0 12px;color:var(--text)}
+.consent input{margin-top:2px;width:18px;height:18px;accent-color:var(--primary);flex:none}
+@media (max-width:600px){
+  .card{border-radius:22px;padding:14px 16px}
+  .btn.wide{min-width:0;flex:1}
+  .bar i{height:6px;gap:6px}
+  .bar{gap:6px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <main class="stage">
+    <section class="intro" id="intro"></section>
+    <section class="card enter" id="card" aria-live="polite"></section>
+  </main>
+</div>
+<noscript><p style="padding:24px">Please turn on JavaScript to use the Candidate Application.</p></noscript>
+<script>
+/* Candidate Application: Connected to TerraTern Lead Engine */
+(function () {
+  'use strict';
+
+  var SETTINGS = {
+    apiBase: 'https://social-media-terratern.vercel.app',
+    pageKey: 'pk_fc4ed7e25cbad857e650c154ce6e21',
+    calculator: 'work-application'
+  };
+
+  var $ = function (id) { return document.getElementById(id); };
+  var card = $('card'), intro = $('intro'), stage = document.querySelector('.stage');
+
+  /* ---------- tracking & analytics sync ---------- */
+  function track(ev, data) {
+    try {
+      var p = Object.assign({ event: ev, calculator: SETTINGS.calculator }, data || {});
+      (window.dataLayer = window.dataLayer || []).push(p);
+
+      // Map local events to Lead Engine funnel events
+      var eventTypeMap = {
+        'application_view': 'view',
+        'application_begin': 'start',
+        'step_view': 'answer',
+        'application_submit': 'submit'
+      };
+      var backendType = eventTypeMap[ev];
+      if (backendType && SETTINGS.pageKey) {
+        fetch(SETTINGS.apiBase + '/api/v1/events', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            page_key: SETTINGS.pageKey,
+            visitor_id: visitorId(),
+            type: backendType,
+            meta: data || {}
+          }),
+          keepalive: true
+        }).catch(function () {});
+      }
+    } catch (e) { /* ignore */ }
+  }
+
+  function visitorId() {
+    try {
+      var k = 'tt_vid', v = localStorage.getItem(k);
+      if (!v) { v = 'v_' + Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem(k, v); }
+      return v;
+    } catch (e) { return 'v_' + Math.random().toString(36).slice(2); }
+  }
+
+  function utm() {
+    var o = {}, q = new URLSearchParams(location.search);
+    ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'].forEach(function (k) { if (q.get(k)) o[k] = q.get(k); });
+    return o;
+  }
+
+  /* ---------- helpers ---------- */
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  var COUNTRIES = [
+    { c: 'IN', n: 'India', d: '+91', min: 10, max: 10, re: /^[6-9]\d{9}$/ },
+    { c: 'AE', n: 'UAE', d: '+971', min: 9, max: 9, re: /^5\d{8}$/ },
+    { c: 'NP', n: 'Nepal', d: '+977', min: 10, max: 10, re: /^9[78]\d{8}$/ },
+    { c: 'BD', n: 'Bangladesh', d: '+880', min: 10, max: 10, re: /^1[3-9]\d{8}$/ },
+    { c: 'LK', n: 'Sri Lanka', d: '+94', min: 9, max: 9, re: /^7\d{8}$/ },
+    { c: 'PK', n: 'Pakistan', d: '+92', min: 10, max: 10, re: /^3\d{9}$/ },
+    { c: 'US', n: 'USA', d: '+1', min: 10, max: 10, re: /^[2-9]\d{9}$/ },
+    { c: 'CA', n: 'Canada', d: '+1', min: 10, max: 10, re: /^[2-9]\d{9}$/ },
+    { c: 'GB', n: 'UK', d: '+44', min: 10, max: 10, re: /^7\d{9}$/ },
+    { c: 'DE', n: 'Germany', d: '+49', min: 10, max: 11, re: /^1\d{9,10}$/ },
+    { c: 'AU', n: 'Australia', d: '+61', min: 9, max: 9, re: /^4\d{8}$/ },
+    { c: 'SA', n: 'Saudi Arabia', d: '+966', min: 9, max: 9, re: /^5\d{8}$/ },
+    { c: 'QA', n: 'Qatar', d: '+974', min: 8, max: 8, re: /^[3567]\d{7}$/ },
+    { c: 'OM', n: 'Oman', d: '+968', min: 8, max: 8, re: /^[79]\d{7}$/ },
+    { c: 'KW', n: 'Kuwait', d: '+965', min: 8, max: 8, re: /^[569]\d{7}$/ },
+    { c: 'SG', n: 'Singapore', d: '+65', min: 8, max: 8, re: /^[89]\d{7}$/ },
+    { c: 'PH', n: 'Philippines', d: '+63', min: 10, max: 10, re: /^9\d{9}$/ },
+    { c: 'NG', n: 'Nigeria', d: '+234', min: 10, max: 10, re: /^[789]\d{9}$/ },
+    { c: 'KE', n: 'Kenya', d: '+254', min: 9, max: 9, re: /^[17]\d{8}$/ }
+  ];
+  var DISPOSABLE = ['mailinator.com', 'tempmail.com', 'temp-mail.org', 'guerrillamail.com', '10minutemail.com', 'yopmail.com', 'trashmail.com', 'sharklasers.com', 'getnada.com', 'dispostable.com', 'maildrop.cc', 'throwawaymail.com', 'fakeinbox.com', 'mohmal.com'];
+  var TYPOS = { 'gmial.com': 'gmail.com', 'gamil.com': 'gmail.com', 'gmai.com': 'gmail.com', 'gmail.con': 'gmail.com', 'gmail.co': 'gmail.com', 'gnail.com': 'gmail.com', 'yahooo.com': 'yahoo.com', 'yaho.com': 'yahoo.com', 'yahoo.con': 'yahoo.com', 'hotmial.com': 'hotmail.com', 'hotmail.con': 'hotmail.com', 'outlok.com': 'outlook.com', 'outlook.con': 'outlook.com', 'rediffmail.con': 'rediffmail.com' };
+
+  var TICK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+  var NOTICE = ['Immediate', '15 days', '30 days', '60 days', '90 days or more'];
+  var MAX_MB = 5;
+  var d = { name: '', email: '', cc: 'IN', phone: '', loc: '', reloc: '', role: '', company: '', yrs: '', notice: '', cur: '', exp: '', file: null, consent: false };
+  var step = 1, TOTAL = 4;
+
+  function ctry() { return COUNTRIES.filter(function (c) { return c.c === d.cc; })[0]; }
+  function cleanPhone() {
+    var c = ctry(), x = d.phone.replace(/\D/g, ''), dial = c.d.replace('+', '');
+    if (x.indexOf(dial) === 0 && x.length > c.max) x = x.slice(dial.length);
+    return x.replace(/^0+/, '');
+  }
+  var suggestion = '';
+  function emailState() {
+    var v = d.email.trim().toLowerCase(); suggestion = '';
+    if (!/^[a-z0-9._%+\-]+@[a-z0-9\-]+(\.[a-z0-9\-]+)*\.[a-z]{2,}$/.test(v) || v.indexOf('..') > -1) return { err: 'Please enter a valid email, like name@gmail.com.', hint: '' };
+    var dom = v.split('@')[1];
+    if (DISPOSABLE.indexOf(dom) > -1) return { err: 'Please use a permanent email so we can reach you.', hint: '' };
+    if (TYPOS[dom]) { suggestion = v.split('@')[0] + '@' + TYPOS[dom]; return { err: '', hint: 'Did you mean <button type="button" class="sug" id="sug">' + esc(suggestion) + '</button>?' }; }
+    return { err: '', hint: '' };
+  }
+  function money(n) {
+    n = Number(n); if (!isFinite(n)) return '';
+    if (n >= 10000000) return '₹' + (n / 10000000).toFixed(2).replace(/\.?0+$/, '') + ' crore a year';
+    if (n >= 100000) return '₹' + (n / 100000).toFixed(2).replace(/\.?0+$/, '') + ' lakh a year';
+    return '₹' + n.toLocaleString('en-IN') + ' a year';
+  }
+  function num(v) { v = String(v).replace(/[,\s₹]/g, ''); return v === '' || isNaN(v) ? NaN : Number(v); }
+
+  /* validation rules */
+  var RULES = {
+    name: function () { var v = d.name.trim(); return (v.length < 2 || !/[A-Za-z\u0900-\u097F]/.test(v) || /\d/.test(v)) ? 'Please enter your full name.' : ''; },
+    email: function () { return emailState().err; },
+    phone: function () {
+      var c = ctry(), x = cleanPhone();
+      if (!x) return 'Please enter your mobile number.';
+      if (x.length < c.min || x.length > c.max || !c.re.test(x)) return c.c === 'IN' ? 'Enter a valid 10-digit Indian mobile number (starts with 6–9).' : 'Enter a valid mobile number for ' + c.n + '.';
+      return '';
+    },
+    loc: function () { return d.loc.trim().length < 2 ? 'Please enter your current city.' : ''; },
+    reloc: function () { return d.reloc ? '' : 'Please choose Yes or No.'; },
+    role: function () { return d.role.trim().length < 2 ? 'Please enter your current role.' : ''; },
+    company: function () { return d.company.trim().length < 2 ? 'Please enter your current company.' : ''; },
+    yrs: function () { var n = num(d.yrs); return (isNaN(n) || n < 0 || n > 50) ? 'Enter your years of experience, like 3 or 4.5.' : ''; },
+    notice: function () { return d.notice ? '' : 'Please choose your notice period.'; },
+    cur: function () { var n = num(d.cur); return (isNaN(n) || n < 0 || n > 100000000) ? 'Enter your current yearly CTC in rupees, like 800000.' : ''; },
+    exp: function () { var n = num(d.exp); return (isNaN(n) || n <= 0 || n > 100000000) ? 'Enter your expected yearly CTC in rupees, like 1200000.' : ''; },
+    file: function () {
+      if (!d.file) return 'Please upload your resume.';
+      if (!/\.(pdf|docx?|PDF|DOCX?)$/.test(d.file.name)) return 'Please upload a PDF, DOC or DOCX file.';
+      if (d.file.size > MAX_MB * 1024 * 1024) return 'Your file is over ' + MAX_MB + ' MB. Please upload a smaller one.';
+      return '';
+    }
+  };
+  var STEP_KEYS = { 1: ['name', 'email', 'phone', 'loc'], 2: ['reloc', 'role', 'company', 'yrs', 'notice'], 3: ['cur', 'exp'], 4: ['file'] };
+  function stepOk(n) { return STEP_KEYS[n].every(function (k) { return !RULES[k](); }) && (n !== 4 || d.consent); }
+
+  function field(id, label, input, hint) {
+    return '<div class="fld"><label for="f-' + id + '">' + label + '</label>' + input + '<p class="err" id="e-' + id + '"></p>' + (hint ? '<p class="hint" id="h-' + id + '"></p>' : '') + '</div>';
+  }
+  function inp(id, ph, extra) { return '<input class="in" id="f-' + id + '" placeholder="' + ph + '" value="' + esc(d[id]) + '" ' + (extra || '') + '>'; }
+
+  function stepHTML(n) {
+    if (n === 1) {
+      var opts = COUNTRIES.map(function (c) { return '<option value="' + c.c + '"' + (c.c === d.cc ? ' selected' : '') + '>' + c.n + ' ' + c.d + '</option>'; }).join('');
+      return '<h3>About you</h3>' +
+        field('name', 'Full name', inp('name', 'Your full name', 'autocomplete="name" maxlength="60"')) +
+        field('email', 'Email address', inp('email', 'you@example.com', 'type="email" inputmode="email" autocomplete="email" maxlength="100"')) +
+        field('phone', 'Phone number', '<div class="phone"><select class="in" id="f-cc" aria-label="Country code">' + opts + '</select>' + inp('phone', 'Mobile number', 'type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="15"') + '</div>') +
+        field('loc', 'Current location', inp('loc', 'City, like Bengaluru', 'autocomplete="address-level2" maxlength="60"'));
+    }
+    if (n === 2) {
+      return '<h3>Your work</h3>' +
+        '<div class="fld"><label>Willing to relocate?</label><div class="yn" id="f-reloc"><button type="button" data-v="Yes" class="' + (d.reloc === 'Yes' ? 'sel' : '') + '">Yes</button><button type="button" data-v="No" class="' + (d.reloc === 'No' ? 'sel' : '') + '">No</button></div><p class="err" id="e-reloc"></p></div>' +
+        field('role', 'Current role or designation', inp('role', 'Like Staff Nurse, Software Engineer', 'maxlength="80"')) +
+        field('company', 'Current company', inp('company', 'Company name', 'maxlength="80"')) +
+        '<div class="two">' + field('yrs', 'Total experience (years)', inp('yrs', 'Like 4.5', 'inputmode="decimal"')) +
+        field('notice', 'Notice period', '<select class="in" id="f-notice"><option value="">Choose</option>' + NOTICE.map(function (x) { return '<option' + (d.notice === x ? ' selected' : '') + '>' + x + '</option>'; }).join('') + '</select>') + '</div>';
+    }
+    if (n === 3) {
+      return '<h3>Your pay</h3>' +
+        field('cur', 'Current CTC (₹ per year)', '<div class="money"><span>₹</span>' + inp('cur', 'Like 800000', 'inputmode="numeric"') + '</div>', 1) +
+        field('exp', 'Expected CTC (₹ per year)', '<div class="money"><span>₹</span>' + inp('exp', 'Like 1200000', 'inputmode="numeric"') + '</div>', 1);
+    }
+    return '<h3>Your resume</h3>' +
+      '<div class="fld"><label for="f-file">Resume (PDF, DOC or DOCX, up to ' + MAX_MB + ' MB)</label>' +
+      '<label class="drop" id="drop" for="f-file"><input type="file" id="f-file" accept=".pdf,.doc,.docx" hidden>' +
+      '<span class="dtxt" id="dtxt">' + (d.file ? '' : '<b>Tap to upload</b> or drop your file here') + '</span></label><p class="err" id="e-file"></p></div>' +
+      '<label class="consent"><input type="checkbox" id="f-consent"' + (d.consent ? ' checked' : '') + '><span>I confirm my details are correct and agree that the hiring team may contact me by call, WhatsApp and email about this application.</span></label>';
+  }
+
+  function show(n) {
+    step = n; track('step_view', { step: n });
+    card.classList.add('welcome'); card.classList.add('cform');
+    card.innerHTML = '<div class="fpane">' +
+      '<div class="stepline">Step <b>' + n + '</b> of ' + TOTAL + '</div>' +
+      '<div class="bar">' + [1, 2, 3, 4].map(function (i) { return '<i class="' + (i <= n ? 'on' : '') + '"></i>'; }).join('') + '</div>' +
+      '<form id="sf" novalidate>' + stepHTML(n) +
+      '<div class="actions"><button type="button" class="btn tert" id="back">' + (n === 1 ? 'Back' : 'Back') + '</button>' +
+      '<button type="submit" class="btn primary" id="next" disabled>' + (n === TOTAL ? 'Submit' : 'Next') + '</button></div></form></div>';
+    wire(n);
+    renderFile(); renderMoney();
+    sync();
+  }
+
+  function renderFile() {
+    var t = $('dtxt'); if (!t) return;
+    if (d.file) {
+      t.innerHTML = '<span class="fchip"><b>' + esc(d.file.name) + '</b><small>' + (d.file.size / 1048576).toFixed(2) + ' MB</small></span><button type="button" class="rm" id="rm">Remove</button>';
+      $('rm').addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); d.file = null; $('f-file').value = ''; t.innerHTML = '<b>Tap to upload</b> or drop your file here'; setErr('file', RULES.file()); sync(); });
+    }
+  }
+  function renderMoney() {
+    ['cur', 'exp'].forEach(function (k) { var h = $('h-' + k); if (h) h.textContent = !isNaN(num(d[k])) && String(d[k]).trim() !== '' ? '= ' + money(num(d[k])) : ''; });
+  }
+  function setErr(k, msg) {
+    var e = $('e-' + k); if (e) e.innerHTML = msg || '';
+    var el = $('f-' + k); if (el && el.classList) el.classList.toggle('bad', !!msg);
+  }
+  function sync() { var b = $('next'); if (b) b.disabled = !stepOk(step); }
+
+  /* ---------- STEP 1 IMMEDIATE LEAD DROP TO SUPABASE & DASHBOARD ---------- */
+  function dropStep1Lead() {
+    try {
+      var phoneFormatted = ctry().d + cleanPhone();
+      var payload = {
+        page_key: SETTINGS.pageKey,
+        visitor_id: visitorId(),
+        name: d.name.trim().replace(/\s+/g, ' '),
+        email: d.email.trim().toLowerCase(),
+        phone: phoneFormatted,
+        country_code: d.cc,
+        consent: true,
+        source: utm().utm_source || 'direct',
+        keyword: utm().utm_term || null,
+        post_id: utm().utm_content || utm().utm_campaign || null,
+        utm: Object.assign({}, utm(), {
+          city: d.loc.trim()
+        })
+      };
+
+      // Non-blocking fetch to Lead Engine API
+      fetch(SETTINGS.apiBase + '/api/v1/leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        keepalive: true
+      }).catch(function (err) {
+        console.warn('[Lead Engine] sync note:', err);
+      });
+    } catch (e) {
+      console.warn('[Lead Engine] err:', e);
+    }
+  }
+
+  function wire(n) {
+    var touched = {};
+    function check(k) {
+      touched[k] = true;
+      if (k === 'email') { var s = emailState(); setErr('email', s.err || s.hint); $('f-email').classList.toggle('bad', !!s.err); }
+      else setErr(k, RULES[k]());
+    }
+    STEP_KEYS[n].forEach(function (k) {
+      var el = $('f-' + k);
+      if (k === 'reloc') {
+        el.addEventListener('click', function (e) {
+          var b = e.target.closest('button'); if (!b) return;
+          d.reloc = b.getAttribute('data-v');
+          [].forEach.call(el.querySelectorAll('button'), function (x) { x.classList.toggle('sel', x === b); });
+          setErr('reloc', ''); sync();
+        });
+        return;
+      }
+      if (k === 'file') {
+        el.addEventListener('change', function () { d.file = el.files[0] || null; renderFile(); setErr('file', d.file ? RULES.file() : ''); sync(); });
+        var drop = $('drop');
+        ['dragover', 'dragenter'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('over'); }); });
+        ['dragleave', 'drop'].forEach(function (ev) { drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('over'); }); });
+        drop.addEventListener('drop', function (e) { var f = e.dataTransfer && e.dataTransfer.files[0]; if (f) { d.file = f; renderFile(); setErr('file', RULES.file()); sync(); } });
+        return;
+      }
+      var ev = el.tagName === 'SELECT' ? 'change' : 'input';
+      el.addEventListener(ev, function () { d[k] = el.value; if (touched[k] || ev === 'change') check(k); if (k === 'cur' || k === 'exp') renderMoney(); sync(); });
+      el.addEventListener('blur', function () { check(k); sync(); });
+    });
+    if (n === 1) $('f-cc').addEventListener('change', function () { d.cc = $('f-cc').value; if (touched.phone) check('phone'); sync(); });
+    if (n === 4) $('f-consent').addEventListener('change', function () { d.consent = $('f-consent').checked; sync(); });
+    $('sf').addEventListener('click', function (e) { if (e.target && e.target.id === 'sug') { d.email = suggestion; $('f-email').value = suggestion; check('email'); sync(); } });
+    $('back').addEventListener('click', function () { if (n === 1) { welcome(); } else { show(n - 1); } });
+    
+    $('sf').addEventListener('submit', function (e) {
+      e.preventDefault();
+      if (!stepOk(n)) return;
+
+      // STEP 1 COMPLETION: IMMEDIATELY SAVE CONTACT DATA IN SUPABASE & DASHBOARD
+      if (n === 1) {
+        dropStep1Lead();
+        show(2);
+        return;
+      }
+
+      // STEPS 2 & 3: ADVANCE NORMALLY (Takes details in UI, but does not store)
+      if (n < TOTAL) {
+        show(n + 1);
+        return;
+      }
+
+      // STEP 4: FINAL SUBMISSION (Logs completion analytics, does NOT store resume or CTC)
+      var b = $('next'); b.disabled = true; b.textContent = 'Submitting…';
+      try { track('application_submit'); } catch (er) {}
+      setTimeout(thanks, 350);
+    });
+
+    var first = card.querySelector('.in'); if (first) setTimeout(function () { try { first.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }, 200);
+  }
+
+  var NEXT4 = [
+    ['Now', 'Our team reviews your application and details'],
+    ['If shortlisted', 'We contact you for the next steps'],
+    ['Meanwhile', 'Keep your phone and email handy']
+  ];
+  function thanks() {
+    track('thank_you');
+    card.classList.add('welcome'); card.classList.remove('cform');
+    var first = esc(d.name.trim().split(' ')[0]);
+    card.innerHTML =
+      '<div class="wel">' +
+        '<span class="ico ok bigtick">' + TICK + '</span>' +
+        '<h1>Application received, ' + first + '!</h1>' +
+        '<p class="wsub">Thank you for applying.</p>' +
+        '<ol class="road">' + NEXT4.map(function (r, i) {
+          return '<li><span class="dot">' + (i + 1) + '</span><span class="rt"><b>' + esc(r[0]) + '</b><span>' + esc(r[1]) + '</span></span></li>';
+        }).join('') + '</ol>' +
+      '</div>';
+  }
+
+  function welcome() {
+    stage.classList.add('result-stage');
+    card.classList.add('welcome'); card.classList.remove('cform');
+    card.innerHTML =
+      '<div class="wel">' +
+        '<span class="pill">We’re hiring</span>' +
+        '<h1>Join our team</h1>' +
+        '<p class="wsub">Thank you for your interest in this opportunity. Shortlisted candidates will be contacted for the next steps.</p>' +
+        '<button type="button" class="btn primary" id="start">Apply now</button>' +
+      '</div>';
+    $('start').addEventListener('click', function () { track('application_begin'); show(1); });
+  }
+
+  document.title = 'Job Application';
+  welcome();
+  track('application_view');
+})();
+</script>
+</body>
+</html>
