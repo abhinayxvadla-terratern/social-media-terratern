@@ -71,14 +71,23 @@ export default function NativePublicLandingPage({ params }: DynamicPageProps) {
       const urlParams = new URLSearchParams(window.location.search);
       const utmObj: Record<string, string> = {};
       ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'].forEach((k) => {
-        const val = urlParams.get(k);
+        const val = urlParams.get(k) || urlParams.get(k.toUpperCase());
         if (val) utmObj[k] = val;
       });
 
+      const altSource = urlParams.get('source') || urlParams.get('src') || urlParams.get('SOURCE') || urlParams.get('SRC');
+      if (!utmObj.utm_source && altSource) utmObj.utm_source = altSource;
+
+      const altTerm = urlParams.get('kw') || urlParams.get('keyword') || urlParams.get('KW') || urlParams.get('KEYWORD');
+      if (!utmObj.utm_term && altTerm) utmObj.utm_term = altTerm;
+
+      const altContent = urlParams.get('post_id') || urlParams.get('post') || urlParams.get('POST_ID');
+      if (!utmObj.utm_content && altContent) utmObj.utm_content = altContent;
+
       setTracking({
-        source: urlParams.get('utm_source') || urlParams.get('src') || urlParams.get('source') || 'direct',
-        keyword: urlParams.get('utm_term') || urlParams.get('kw') || urlParams.get('keyword') || null,
-        postId: urlParams.get('utm_content') || urlParams.get('post_id') || urlParams.get('post') || null,
+        source: utmObj.utm_source || 'direct',
+        keyword: utmObj.utm_term || null,
+        postId: utmObj.utm_content || utmObj.utm_campaign || null,
         utm: utmObj,
       });
     }
@@ -306,6 +315,7 @@ export default function NativePublicLandingPage({ params }: DynamicPageProps) {
         window.__TT_API_HOST__ = "${originUrl}";
         window.__TT_DOWNLOAD_URL__ = "${downloadEndpoint}";
         window.__TT_HAS_PDF__ = ${Boolean(page.has_pdf)};
+        window.__TT_TRACKING__ = ${JSON.stringify(tracking)};
       </script>
       <script src="${scriptSrc}" data-page-key="${page.page_key}" async></script>
     `;

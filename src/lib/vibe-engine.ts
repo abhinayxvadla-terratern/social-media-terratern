@@ -251,12 +251,20 @@ export function synthesizeCustomHtml(config: VibePageConfig): string {
       submitBtn.disabled = true;
 
       // URL Attribution (Clean direct by default; captures custom UTM if present)
-      const params = new URLSearchParams(window.location.search);
+      let search = window.location.search || '';
+      try {
+        if (!search && window.parent && window.parent !== window && window.parent.location.search) {
+          search = window.parent.location.search;
+        }
+      } catch (e) {}
+      const params = new URLSearchParams(search);
       const utmObj = {};
       ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'].forEach((k) => {
-        const v = params.get(k);
+        const v = params.get(k) || params.get(k.toUpperCase());
         if (v) utmObj[k] = v;
       });
+      const altSrc = params.get('source') || params.get('src') || params.get('SOURCE') || params.get('SRC');
+      if (!utmObj.utm_source && altSrc) utmObj.utm_source = altSrc;
 
       const payload = {
         phone: phone,
@@ -264,9 +272,9 @@ export function synthesizeCustomHtml(config: VibePageConfig): string {
         email: email,
         consent: consent,
         quiz_score: totalScore,
-        source: params.get('utm_source') || params.get('src') || params.get('source') || 'direct',
+        source: utmObj.utm_source || 'direct',
         keyword: params.get('utm_term') || params.get('kw') || params.get('keyword') || null,
-        post_id: params.get('utm_content') || params.get('post_id') || null,
+        post_id: params.get('utm_content') || params.get('post_id') || params.get('utm_campaign') || null,
         utm: utmObj,
         page_key: window.__TT_PAGE_KEY__ || ''
       };

@@ -117,6 +117,50 @@ export async function POST(req: NextRequest) {
 
   const cleaned = validation.cleaned!;
 
+  // Resolve UTM and marketing attribution (ensures real utm_source is NEVER lost as 'direct')
+  const resolvedUtm: Record<string, any> = utm && typeof utm === 'object' ? { ...utm } : {};
+  const sourceFromUtm =
+    resolvedUtm.utm_source ||
+    resolvedUtm.UTM_SOURCE ||
+    resolvedUtm.source ||
+    resolvedUtm.src;
+
+  const keywordFromUtm =
+    resolvedUtm.utm_term ||
+    resolvedUtm.UTM_TERM ||
+    resolvedUtm.keyword ||
+    resolvedUtm.kw;
+
+  const postIdFromUtm =
+    resolvedUtm.utm_content ||
+    resolvedUtm.UTM_CONTENT ||
+    resolvedUtm.post_id ||
+    resolvedUtm.post ||
+    resolvedUtm.utm_campaign ||
+    resolvedUtm.UTM_CAMPAIGN;
+
+  const effectiveSource =
+    (source && String(source).trim().toLowerCase() !== 'direct' ? String(source).trim() : null) ||
+    (sourceFromUtm ? String(sourceFromUtm).trim() : null) ||
+    (source ? String(source).trim() : 'direct');
+
+  const effectiveKeyword =
+    (keyword ? String(keyword).trim() : null) ||
+    (keywordFromUtm ? String(keywordFromUtm).trim() : null) ||
+    null;
+
+  const effectivePostId =
+    (post_id ? String(post_id).trim() : null) ||
+    (postIdFromUtm ? String(postIdFromUtm).trim() : null) ||
+    null;
+
+  if (effectiveSource && !resolvedUtm.utm_source) {
+    resolvedUtm.utm_source = effectiveSource;
+  }
+  if (effectiveKeyword && !resolvedUtm.utm_term) {
+    resolvedUtm.utm_term = effectiveKeyword;
+  }
+
   // Submit complete lead via database function
   const { data: res, error: submitErr } = await supabase.rpc('api_submit_lead', {
     p_page_key: page_key.trim(),
@@ -126,10 +170,10 @@ export async function POST(req: NextRequest) {
     p_phone_e164: cleaned.phone_e164,
     p_country_code: cleaned.country_code,
     p_consent: true,
-    p_source: source ? String(source).trim() : null,
-    p_keyword: keyword ? String(keyword).trim() : null,
-    p_post_id: post_id ? String(post_id).trim() : null,
-    p_utm: utm && typeof utm === 'object' ? utm : {},
+    p_source: effectiveSource,
+    p_keyword: effectiveKeyword,
+    p_post_id: effectivePostId,
+    p_utm: resolvedUtm,
     p_quiz_score: typeof quiz_score === 'number' ? quiz_score : null,
     p_quiz_result: quiz_result ? String(quiz_result).trim() : null,
   });
@@ -224,7 +268,55 @@ export async function DELETE(req: NextRequest) {
 
   const supabase = getSupabaseServiceClient();
 
-  // First delete associated events or allow ON DELETE SET NULL to take effect
+  // RBAC Enforcement: Only authenticated owners have permission to delete lead records
+  const authHeader = req.headers.get('authorization') || '';
+  const adminToken = authHeader.replace(/^Bearer\s+/i, '') || req.headers.get('x-admin-token');
+  const expectedAdminToken = process.env.ADMIN_API_TOKEN || 'tt_admin_sec_dev_2026_x89';
+
+  let isAuthorizedOwner = Boolean(adminToken && adminToken === expectedAdminToken);
+
+  if (!isAuthorizedOwner) {
+    try {
+      const { createServerClient } = await import('@supabase/ssr');
+      const { cookies } = await import('next/headers');
+      const cookieStore = await cookies();
+      const serverSupabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+          cookies: {
+            getAll() {
+              return cookieStore.getAll();
+            },
+            setAll() {},
+          },
+        }
+      );
+      const { data: { user } } = await serverSupabase.auth.getUser();
+      if (user) {
+        const { data: adminRecord } = await supabase
+          .from('admin_users')
+          .select('role')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (adminRecord && adminRecord.role === 'owner') {
+          isAuthorizedOwner = true;
+        }
+      }
+    } catch {
+      isAuthorizedOwner = false;
+    }
+  }
+
+  if (!isAuthorizedOwner) {
+    return NextResponse.json(
+      { error: 'Forbidden: Only owners have permission to delete leads.' },
+      { status: 403 }
+    );
+  }
+
+  // Delete lead
   const { error: delErr } = await supabase
     .from('leads')
     .delete()

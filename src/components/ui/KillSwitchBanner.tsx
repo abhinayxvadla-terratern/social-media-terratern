@@ -18,9 +18,10 @@ export function KillSwitchBanner({
 }: KillSwitchBannerProps) {
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const canEdit = userRole === "owner" || userRole === "editor";
+  const isOwner = userRole === "owner";
 
   const handleConfirm = async () => {
+    if (!isOwner) return;
     setLoading(true);
     try {
       await onToggleKillSwitch(!isKillSwitchActive);
@@ -56,7 +57,7 @@ export function KillSwitchBanner({
             </div>
           </div>
 
-          {canEdit && (
+          {isOwner && (
             <button
               onClick={() => setIsConfirmOpen(true)}
               disabled={loading}
@@ -77,10 +78,10 @@ export function KillSwitchBanner({
             </span>
           </div>
 
-          {canEdit && (
+          {isOwner && (
             <button
               onClick={() => setIsConfirmOpen(true)}
-              title="Pause all lead pages immediately"
+              title="Pause all lead pages immediately (Owner only)"
               className="px-2.5 py-1 text-xs font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200/60 rounded-lg transition-colors flex items-center gap-1.5 touch-target"
             >
               <AlertTriangle className="w-3.5 h-3.5" />

@@ -54,19 +54,54 @@
 
   const visitorId = getVisitorId();
 
-  // Extract UTM and source attribution from URL
+  // Extract UTM and source attribution from URL (with iframe parent fallback and case-insensitivity)
   function getUrlAttribution() {
-    const params = new URLSearchParams(window.location.search);
+    let search = window.location.search || '';
+    try {
+      if (!search && window.parent && window.parent !== window && window.parent.location.search) {
+        search = window.parent.location.search;
+      }
+    } catch (e) {}
+
+    const params = new URLSearchParams(search);
     const utm = {};
     const utmKeys = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
+
+    // Check both standard and uppercase/alias param names
     utmKeys.forEach(function (k) {
-      const val = params.get(k);
+      const val = params.get(k) || params.get(k.toUpperCase());
       if (val) utm[k] = val;
     });
 
-    const source = utm.utm_source || params.get('src') || params.get('source') || 'direct';
-    const keyword = utm.utm_term || params.get('kw') || params.get('keyword') || null;
-    const postId = utm.utm_content || params.get('post_id') || params.get('post') || utm.utm_campaign || null;
+    // Check alias parameters
+    const altSource = params.get('source') || params.get('src') || params.get('SOURCE') || params.get('SRC');
+    if (!utm.utm_source && altSource) {
+      utm.utm_source = altSource;
+    }
+
+    const altTerm = params.get('kw') || params.get('keyword') || params.get('KW') || params.get('KEYWORD');
+    if (!utm.utm_term && altTerm) {
+      utm.utm_term = altTerm;
+    }
+
+    const altContent = params.get('post_id') || params.get('post') || params.get('POST_ID');
+    if (!utm.utm_content && altContent) {
+      utm.utm_content = altContent;
+    }
+
+    // Merge with parent injected tracking if present
+    if (typeof window !== 'undefined' && window.__TT_TRACKING__) {
+      if (window.__TT_TRACKING__.source && window.__TT_TRACKING__.source !== 'direct' && !utm.utm_source) {
+        utm.utm_source = window.__TT_TRACKING__.source;
+      }
+      if (window.__TT_TRACKING__.utm) {
+        Object.assign(utm, window.__TT_TRACKING__.utm);
+      }
+    }
+
+    const source = utm.utm_source || 'direct';
+    const keyword = utm.utm_term || null;
+    const postId = utm.utm_content || utm.utm_campaign || null;
 
     return { source: source, keyword: keyword, post_id: postId, utm: utm };
   }
@@ -696,6 +731,9 @@
       consent: true,
       quiz_score: finalScore,
       quiz_result: finalResult,
+      source: attribution.source,
+      keyword: attribution.keyword,
+      post_id: attribution.post_id,
       utm: Object.assign({}, attribution.utm, leadData.meta),
     };
 

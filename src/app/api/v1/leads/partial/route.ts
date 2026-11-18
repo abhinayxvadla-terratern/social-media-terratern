@@ -102,16 +102,60 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Resolve UTM and marketing attribution (ensures real utm_source is NEVER lost as 'direct')
+  const resolvedUtm: Record<string, any> = utm && typeof utm === 'object' ? { ...utm } : {};
+  const sourceFromUtm =
+    resolvedUtm.utm_source ||
+    resolvedUtm.UTM_SOURCE ||
+    resolvedUtm.source ||
+    resolvedUtm.src;
+
+  const keywordFromUtm =
+    resolvedUtm.utm_term ||
+    resolvedUtm.UTM_TERM ||
+    resolvedUtm.keyword ||
+    resolvedUtm.kw;
+
+  const postIdFromUtm =
+    resolvedUtm.utm_content ||
+    resolvedUtm.UTM_CONTENT ||
+    resolvedUtm.post_id ||
+    resolvedUtm.post ||
+    resolvedUtm.utm_campaign ||
+    resolvedUtm.UTM_CAMPAIGN;
+
+  const effectiveSource =
+    (source && String(source).trim().toLowerCase() !== 'direct' ? String(source).trim() : null) ||
+    (sourceFromUtm ? String(sourceFromUtm).trim() : null) ||
+    (source ? String(source).trim() : 'direct');
+
+  const effectiveKeyword =
+    (keyword ? String(keyword).trim() : null) ||
+    (keywordFromUtm ? String(keywordFromUtm).trim() : null) ||
+    null;
+
+  const effectivePostId =
+    (post_id ? String(post_id).trim() : null) ||
+    (postIdFromUtm ? String(postIdFromUtm).trim() : null) ||
+    null;
+
+  if (effectiveSource && !resolvedUtm.utm_source) {
+    resolvedUtm.utm_source = effectiveSource;
+  }
+  if (effectiveKeyword && !resolvedUtm.utm_term) {
+    resolvedUtm.utm_term = effectiveKeyword;
+  }
+
   const { data: res, error: partialErr } = await supabase.rpc('api_submit_partial_lead', {
     p_page_key: page_key.trim(),
     p_visitor_id: visitor_id.trim(),
     p_name: cleanedName,
     p_phone_e164: phoneRes.e164,
     p_country_code: country_code,
-    p_source: source ? String(source).trim() : null,
-    p_keyword: keyword ? String(keyword).trim() : null,
-    p_post_id: post_id ? String(post_id).trim() : null,
-    p_utm: utm && typeof utm === 'object' ? utm : {},
+    p_source: effectiveSource,
+    p_keyword: effectiveKeyword,
+    p_post_id: effectivePostId,
+    p_utm: resolvedUtm,
   });
 
   if (partialErr || (res && !res.success)) {

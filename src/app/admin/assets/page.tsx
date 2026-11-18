@@ -24,7 +24,7 @@ import { getCachedData, setCachedData } from "@/lib/client-cache";
 import { ensureSinglePagePdf } from "@/lib/pdf-utils";
 
 export default function AssetsManagementPage() {
-  const { userRole, canEdit } = useAdmin();
+  const { userRole, canEdit, isOwner } = useAdmin();
   const supabase = createClient();
 
   const cachedAssets = getCachedData<Asset[]>("admin_assets");
@@ -196,9 +196,9 @@ export default function AssetsManagementPage() {
     }
   };
 
-  // Delete Asset
+  // Delete Asset (Owner only)
   const handleDeleteAsset = async () => {
-    if (!deleteConfirmAsset || !canEdit) return;
+    if (!deleteConfirmAsset || !isOwner) return;
     setIsDeleting(true);
 
     try {
@@ -350,13 +350,15 @@ export default function AssetsManagementPage() {
                           <Paperclip className="w-4 h-4" />
                         </button>
 
-                        <button
-                          onClick={() => setDeleteConfirmAsset(asset)}
-                          className="touch-target p-2 text-rose-500 hover:bg-rose-50 rounded-lg"
-                          title="Delete Asset"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {isOwner && (
+                          <button
+                            onClick={() => setDeleteConfirmAsset(asset)}
+                            className="touch-target p-2 text-rose-500 hover:bg-rose-50 rounded-lg"
+                            title="Delete Asset"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -458,13 +460,15 @@ export default function AssetsManagementPage() {
                                 >
                                   <Paperclip className="w-4 h-4" />
                                 </button>
-                                <button
-                                  onClick={() => setDeleteConfirmAsset(asset)}
-                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
-                                  title="Delete Asset"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
+                                {isOwner && (
+                                  <button
+                                    onClick={() => setDeleteConfirmAsset(asset)}
+                                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                                    title="Delete Asset"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                )}
                               </>
                             )}
                           </div>

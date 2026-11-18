@@ -54,7 +54,7 @@ function formatDateParts(dateString: string | null | undefined): { date: string;
 }
 
 export default function LeadsManagementPage() {
-  const { userRole } = useAdmin();
+  const { userRole, isOwner } = useAdmin();
   const supabase = createClient();
 
   const cachedLeads = getCachedData<Lead[]>("admin_leads");
@@ -177,9 +177,9 @@ export default function LeadsManagementPage() {
     };
   };
 
-  // Delete lead handler
+  // Delete lead handler (Owner only)
   const handleConfirmDeleteLead = async () => {
-    if (!leadToDelete) return;
+    if (!leadToDelete || !isOwner) return;
     setIsDeleting(true);
     try {
       // 1. Try direct authenticated delete with Supabase client
@@ -245,13 +245,21 @@ export default function LeadsManagementPage() {
   // Distinct sources and keywords for filters
   const uniqueSources = useMemo(() => {
     return Array.from(
-      new Set(leads.map((l) => l.source).filter(Boolean))
+      new Set(
+        leads
+          .map((l) => l.source || l.utm?.utm_source)
+          .filter(Boolean)
+      )
     ) as string[];
   }, [leads]);
 
   const uniqueKeywords = useMemo(() => {
     return Array.from(
-      new Set(leads.map((l) => l.keyword).filter(Boolean))
+      new Set(
+        leads
+          .map((l) => l.keyword || l.utm?.utm_term)
+          .filter(Boolean)
+      )
     ) as string[];
   }, [leads]);
 
@@ -260,13 +268,15 @@ export default function LeadsManagementPage() {
     return leads.filter((lead) => {
       // Search
       const searchLower = search.toLowerCase();
+      const leadSource = lead.source || lead.utm?.utm_source || "direct";
+      const leadKeyword = lead.keyword || lead.utm?.utm_term || "";
       const matchesSearch =
         !search ||
         (lead.name && lead.name.toLowerCase().includes(searchLower)) ||
         (lead.email && lead.email.toLowerCase().includes(searchLower)) ||
         (lead.phone_e164 && lead.phone_e164.toLowerCase().includes(searchLower)) ||
-        (lead.source && lead.source.toLowerCase().includes(searchLower)) ||
-        (lead.keyword && lead.keyword.toLowerCase().includes(searchLower));
+        leadSource.toLowerCase().includes(searchLower) ||
+        leadKeyword.toLowerCase().includes(searchLower);
 
       // Page
       const matchesPage =
@@ -274,11 +284,11 @@ export default function LeadsManagementPage() {
 
       // Source
       const matchesSource =
-        selectedSource === "all" ? true : lead.source === selectedSource;
+        selectedSource === "all" ? true : leadSource.toLowerCase() === selectedSource.toLowerCase();
 
       // Keyword
       const matchesKeyword =
-        selectedKeyword === "all" ? true : lead.keyword === selectedKeyword;
+        selectedKeyword === "all" ? true : leadKeyword.toLowerCase() === selectedKeyword.toLowerCase();
 
       // Completeness
       const matchesCompleteness =
@@ -665,14 +675,16 @@ export default function LeadsManagementPage() {
                         <span>Details</span>
                         <ChevronRight className="w-3.5 h-3.5" />
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => setLeadToDelete(lead)}
-                        className="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 transition"
-                        title="Delete lead"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      {isOwner && (
+                        <button
+                          type="button"
+                          onClick={() => setLeadToDelete(lead)}
+                          className="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 transition"
+                          title="Delete lead permanently"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -820,17 +832,19 @@ export default function LeadsManagementPage() {
                               <span>Details</span>
                               <ChevronRight className="w-3.5 h-3.5" />
                             </button>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setLeadToDelete(lead);
-                              }}
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition"
-                              title="Delete lead permanently"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            {isOwner && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setLeadToDelete(lead);
+                                }}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition"
+                                title="Delete lead permanently"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -1043,14 +1057,18 @@ export default function LeadsManagementPage() {
 
             {/* Modal Actions */}
             <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => setLeadToDelete(selectedLead)}
-                className="px-3.5 py-2 text-rose-600 hover:bg-rose-50 border border-rose-200 font-bold text-xs rounded-xl transition flex items-center gap-1.5"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Delete Lead</span>
-              </button>
+              {isOwner ? (
+                <button
+                  type="button"
+                  onClick={() => setLeadToDelete(selectedLead)}
+                  className="px-3.5 py-2 text-rose-600 hover:bg-rose-50 border border-rose-200 font-bold text-xs rounded-xl transition flex items-center gap-1.5"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete Lead</span>
+                </button>
+              ) : (
+                <div />
+              )}
               <button
                 type="button"
                 onClick={() => setSelectedLead(null)}

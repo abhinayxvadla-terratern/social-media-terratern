@@ -78,16 +78,30 @@ export default function PagesManagementPage() {
   const [copiedUtmLink, setCopiedUtmLink] = useState(false);
 
   const getCustomCampaignUrl = (baseSlug: string) => {
-    const baseUrl = `${origin}/p/${baseSlug}`;
-    const params = new URLSearchParams();
-    if (utmSource.trim()) params.set("utm_source", utmSource.trim().toLowerCase());
-    if (utmMedium.trim()) params.set("utm_medium", utmMedium.trim().toLowerCase());
-    if (utmCampaign.trim()) params.set("utm_campaign", utmCampaign.trim().toLowerCase());
-    if (utmTerm.trim()) params.set("utm_term", utmTerm.trim());
-    if (utmContent.trim()) params.set("utm_content", utmContent.trim());
+    let rawBase = `${origin}/p/${baseSlug}`;
+    if (integrationModalPage?.page_url && integrationModalPage.page_url.startsWith("http")) {
+      rawBase = integrationModalPage.page_url;
+    }
 
-    const qs = params.toString();
-    return qs ? `${baseUrl}?${qs}` : baseUrl;
+    try {
+      const urlObj = new URL(rawBase);
+      if (utmSource.trim()) urlObj.searchParams.set("utm_source", utmSource.trim().toLowerCase());
+      if (utmMedium.trim()) urlObj.searchParams.set("utm_medium", utmMedium.trim().toLowerCase());
+      if (utmCampaign.trim()) urlObj.searchParams.set("utm_campaign", utmCampaign.trim().toLowerCase());
+      if (utmTerm.trim()) urlObj.searchParams.set("utm_term", utmTerm.trim());
+      if (utmContent.trim()) urlObj.searchParams.set("utm_content", utmContent.trim());
+      return urlObj.toString();
+    } catch {
+      const params = new URLSearchParams();
+      if (utmSource.trim()) params.set("utm_source", utmSource.trim().toLowerCase());
+      if (utmMedium.trim()) params.set("utm_medium", utmMedium.trim().toLowerCase());
+      if (utmCampaign.trim()) params.set("utm_campaign", utmCampaign.trim().toLowerCase());
+      if (utmTerm.trim()) params.set("utm_term", utmTerm.trim());
+      if (utmContent.trim()) params.set("utm_content", utmContent.trim());
+
+      const qs = params.toString();
+      return qs ? `${rawBase}${rawBase.includes("?") ? "&" : "?"}${qs}` : rawBase;
+    }
   };
 
   const handleResetUtm = () => {
@@ -281,9 +295,9 @@ export default function PagesManagementPage() {
     }
   };
 
-  // Delete page
+  // Delete page (Owner only)
   const handleDeleteConfirm = async () => {
-    if (!deleteConfirmPage || !canEdit) return;
+    if (!deleteConfirmPage || !isOwner) return;
     try {
       const { error } = await supabase
         .from("pages")
@@ -391,7 +405,7 @@ export default function PagesManagementPage() {
   };
 
   const handleBulkDelete = async () => {
-    if (selectedPageIds.length === 0 || !canEdit) return;
+    if (selectedPageIds.length === 0 || !isOwner) return;
     if (
       !confirm(
         `Are you sure you want to delete ${selectedPageIds.length} selected page(s)? This action cannot be undone.`
@@ -566,14 +580,16 @@ export default function PagesManagementPage() {
               <span>Pause / Unlive</span>
             </button>
 
-            <button
-              onClick={handleBulkDelete}
-              disabled={isBulkActionLoading}
-              className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center gap-1.5"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>Delete</span>
-            </button>
+            {isOwner && (
+              <button
+                onClick={handleBulkDelete}
+                disabled={isBulkActionLoading}
+                className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-xl transition shadow-xs flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete</span>
+              </button>
+            )}
 
             <button
               onClick={() => setSelectedPageIds([])}
@@ -763,13 +779,15 @@ export default function PagesManagementPage() {
                         >
                           <CopyPlus className="w-4 h-4" />
                         </button>
-                        <button
-                          onClick={() => setDeleteConfirmPage(page)}
-                          className="touch-target p-2 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition"
-                          title="Delete Page"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {isOwner && (
+                          <button
+                            onClick={() => setDeleteConfirmPage(page)}
+                            className="touch-target p-2 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition"
+                            title="Delete Page"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -953,13 +971,15 @@ export default function PagesManagementPage() {
                                 >
                                   <CopyPlus className="w-4 h-4" />
                                 </button>
-                                <button
-                                  onClick={() => setDeleteConfirmPage(page)}
-                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
-                                  title="Delete page"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
+                                {isOwner && (
+                                  <button
+                                    onClick={() => setDeleteConfirmPage(page)}
+                                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                                    title="Delete page"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                )}
                               </div>
                             )}
                           </div>
