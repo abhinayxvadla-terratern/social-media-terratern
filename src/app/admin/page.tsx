@@ -204,32 +204,28 @@ export default function AdminOverviewDashboard() {
       try {
         if (!cached) setLoading(true);
 
-        // 1. Fetch Pages
-        const { data: pagesData } = await supabase
-          .from('pages')
-          .select('*')
-          .order('created_at', { ascending: false });
+        // Fetch Pages, Leads, Events, and Stats concurrently for optimal load performance
+        const [pagesRes, leadsRes, eventsRes, statsRes] = await Promise.all([
+          supabase
+            .from('pages')
+            .select('*')
+            .order('created_at', { ascending: false }),
+          supabase
+            .from('leads')
+            .select('*, page:pages(id, name, slug)')
+            .order('created_at', { ascending: false }),
+          supabase
+            .from('events')
+            .select('id, page_id, type, created_at'),
+          supabase
+            .from('page_stats')
+            .select('*'),
+        ]);
 
-        // 2. Fetch All Leads with page info
-        const { data: leadsData } = await supabase
-          .from('leads')
-          .select('*, page:pages(id, name, slug)')
-          .order('created_at', { ascending: false });
-
-        // 3. Fetch Raw Events for date & page filtering
-        const { data: eventsData } = await supabase
-          .from('events')
-          .select('id, page_id, type, created_at');
-
-        // 4. Fetch Page Stats view
-        const { data: pageStatsData } = await supabase
-          .from('page_stats')
-          .select('*');
-
-        const rawPagesList = (pagesData as Page[]) || [];
-        const allLeads = (leadsData as unknown as Lead[]) || [];
-        const allEvents = (eventsData as any[]) || [];
-        const allStats = (pageStatsData as PageStat[]) || [];
+        const rawPagesList = (pagesRes.data as Page[]) || [];
+        const allLeads = (leadsRes.data as unknown as Lead[]) || [];
+        const allEvents = (eventsRes.data as any[]) || [];
+        const allStats = (statsRes.data as PageStat[]) || [];
 
         // Add Frontend Calculators Hub as a tracked page in Overview
         const hubLeadsCount = allLeads.filter(

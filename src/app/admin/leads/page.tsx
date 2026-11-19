@@ -179,25 +179,26 @@ export default function LeadsManagementPage() {
       if (!cachedLeads) setLoading(true);
       setError(null);
 
-      // Fetch pages for filter dropdown
-      const { data: pagesData } = await supabase
-        .from("pages")
-        .select("id, name, slug")
-        .order("name", { ascending: true });
+      // Fetch pages and leads in parallel for fast loading
+      const [pagesRes, leadsRes] = await Promise.all([
+        supabase
+          .from("pages")
+          .select("id, name, slug")
+          .order("name", { ascending: true }),
+        supabase
+          .from("leads")
+          .select("*, page:pages(id, name, slug)")
+          .order("created_at", { ascending: false }),
+      ]);
 
+      const pagesData = pagesRes.data;
       const hubPageBrief = { id: "page_frontend_hub", name: "Webpage (/)", slug: "" } as Page;
       const allPagesBrief = [hubPageBrief, ...(pagesData as Page[] || [])];
       setPages(allPagesBrief);
       setCachedData("admin_pages_brief", allPagesBrief);
 
-      // Fetch leads with page relationship
-      const { data: leadsData, error: leadsError } = await supabase
-        .from("leads")
-        .select("*, page:pages(id, name, slug)")
-        .order("created_at", { ascending: false });
-
-      if (leadsError) throw leadsError;
-      const allLeads = (leadsData as Lead[]) || [];
+      if (leadsRes.error) throw leadsRes.error;
+      const allLeads = (leadsRes.data as Lead[]) || [];
       setLeads(allLeads);
       setCachedData("admin_leads", allLeads);
     } catch (err: any) {

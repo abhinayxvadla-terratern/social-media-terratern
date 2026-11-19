@@ -58,40 +58,36 @@ export default function TractionAnalyticsPage() {
       if (!cachedTraction) setLoading(true);
       setError(null);
 
-      // 1. Fetch pages for page filter
-      const { data: pagesData } = await supabase
-        .from("pages")
-        .select("id, name, slug")
-        .order("name", { ascending: true });
+      // Fetch all traction analytics datasets simultaneously in parallel
+      const [pagesRes, statsRes, trendsRes, sourceRes] = await Promise.all([
+        supabase
+          .from("pages")
+          .select("id, name, slug")
+          .order("name", { ascending: true }),
+        supabase
+          .from("page_stats")
+          .select("*"),
+        supabase
+          .from("daily_trend")
+          .select("*")
+          .order("report_date", { ascending: false }),
+        supabase
+          .from("leads_by_source")
+          .select("*")
+          .order("total_leads", { ascending: false }),
+      ]);
 
       const hubPageBrief = { id: "page_frontend_hub", name: "Webpage (/)", slug: "" } as Page;
-      const allPages = [hubPageBrief, ...((pagesData as Page[]) || [])];
+      const allPages = [hubPageBrief, ...((pagesRes.data as Page[]) || [])];
       setPages(allPages);
 
-      // 2. Fetch page stats
-      const { data: statsData, error: statsError } = await supabase
-        .from("page_stats")
-        .select("*");
-      if (statsError) throw statsError;
-      const allStats = (statsData as PageStat[]) || [];
+      const allStats = (statsRes.data as PageStat[]) || [];
       setPageStats(allStats);
 
-      // 3. Fetch daily trend
-      const { data: trendsData, error: trendsError } = await supabase
-        .from("daily_trend")
-        .select("*")
-        .order("report_date", { ascending: false });
-      if (trendsError) throw trendsError;
-      const allTrends = (trendsData as DailyTrend[]) || [];
+      const allTrends = (trendsRes.data as DailyTrend[]) || [];
       setDailyTrends(allTrends);
 
-      // 4. Fetch leads by source
-      const { data: sourceData, error: sourceError } = await supabase
-        .from("leads_by_source")
-        .select("*")
-        .order("total_leads", { ascending: false });
-      if (sourceError) throw sourceError;
-      const allSources = (sourceData as LeadsBySource[]) || [];
+      const allSources = (sourceRes.data as LeadsBySource[]) || [];
       setLeadsBySource(allSources);
 
       setCachedData("admin_traction", {

@@ -55,10 +55,18 @@ const GIFT_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 const AV_COLORS = ['#F4C95D', '#9EBBF2', '#F3A29A', '#A8DDB5', '#C9B8F0'];
 
 export default function TerraTernPublicCalculatorsHub() {
-  const [calculators, setCalculators] = useState<CalculatorItem[]>(SEED_CALCULATORS);
-  const [heroCalc, setHeroCalc] = useState<CalculatorItem>(SEED_CALCULATORS[0]);
-  const [testimonials, setTestimonials] = useState<TestimonialItem[]>(SEED_TESTIMONIALS);
-  const [loading, setLoading] = useState(true);
+  // Check sessionStorage for cached public directory data for zero-flash instant render
+  const cachedDirectory = typeof window !== "undefined" ? (() => {
+    try {
+      const raw = sessionStorage.getItem("tt_public_directory");
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+  })() : null;
+
+  const [calculators, setCalculators] = useState<CalculatorItem[]>(() => cachedDirectory?.calculators || SEED_CALCULATORS);
+  const [heroCalc, setHeroCalc] = useState<CalculatorItem>(() => cachedDirectory?.hero_calculator || SEED_CALCULATORS[0]);
+  const [testimonials, setTestimonials] = useState<TestimonialItem[]>(() => cachedDirectory?.testimonials || SEED_TESTIMONIALS);
+  const [loading, setLoading] = useState(() => !cachedDirectory);
 
   // Filter states
   // Streamlined Filter state (Country, Category/Type, Sort)
@@ -118,6 +126,9 @@ export default function TerraTernPublicCalculatorsHub() {
             if (Array.isArray(data.testimonials) && data.testimonials.length > 0) {
               setTestimonials(data.testimonials);
             }
+            try {
+              sessionStorage.setItem("tt_public_directory", JSON.stringify(data));
+            } catch {}
           }
         })
         .catch((err) => console.warn("Using fallback seed data:", err))

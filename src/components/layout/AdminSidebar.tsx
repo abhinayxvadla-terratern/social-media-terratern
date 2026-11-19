@@ -84,7 +84,7 @@ export function AdminSidebar({
       {/* Brand Logo */}
       <div className="pb-3 lg:pb-4 border-b border-slate-100 flex-shrink-0">
         <Link href="/admin" className="block focus:outline-none">
-          <TerraTernLogo size="md" subtitle="Lead Portal" />
+          <TerraTernLogo size="md" />
         </Link>
       </div>
 

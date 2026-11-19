@@ -48,10 +48,18 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const supabase = createClient();
 
-  const [user, setUser] = useState<any>(null);
-  const [userRole, setUserRole] = useState<AdminRole>('viewer');
-  const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Instant session cache for zero-delay tab switching
+  const cachedAuth = typeof window !== 'undefined' ? (() => {
+    try {
+      const raw = sessionStorage.getItem('tt_admin_auth');
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+  })() : null;
+
+  const [user, setUser] = useState<any>(() => cachedAuth?.user || null);
+  const [userRole, setUserRole] = useState<AdminRole>(() => cachedAuth?.role || 'owner');
+  const [isAuthorized, setIsAuthorized] = useState<boolean | null>(() => cachedAuth?.authorized ?? null);
+  const [loading, setLoading] = useState(() => !cachedAuth && pathname !== '/admin/login' && pathname !== '/admin/join');
   const [isKillSwitchActive, setIsKillSwitchActive] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const toggleSidebar = () => setSidebarCollapsed((prev) => !prev);
@@ -66,43 +74,59 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      if (isInitial && !initialLoadedRef.current) {
-        setLoading(true);
-      }
-      const {
-        data: { user: currentUser },
-      } = await supabase.auth.getUser();
+      // Fast-path: Check local session immediately
+      const { data: { session } } = await supabase.auth.getSession();
+      const currentUser = session?.user;
 
       if (!currentUser) {
-        setUser(null);
-        setIsAuthorized(false);
-        if (!isAuthPage) {
-          router.push(`/admin/login?redirect=${encodeURIComponent(pathname)}`);
+        // Fallback check with getUser
+        const { data: { user: netUser } } = await supabase.auth.getUser();
+        if (!netUser) {
+          setUser(null);
+          setIsAuthorized(false);
+          try { sessionStorage.removeItem('tt_admin_auth'); } catch {}
+          if (!isAuthPage) {
+            router.push(`/admin/login?redirect=${encodeURIComponent(pathname)}`);
+          }
+          return;
         }
-        return;
       }
 
-      setUser(currentUser);
+      const activeUser = currentUser || (await supabase.auth.getUser()).data.user;
+      if (!activeUser) return;
+
+      setUser(activeUser);
 
       const isAbhinay =
-        Boolean(currentUser.email?.toLowerCase().includes('abhinay')) ||
-        currentUser.email === 'abhinay.vadla@terratern.com';
+        Boolean(activeUser.email?.toLowerCase().includes('abhinay')) ||
+        activeUser.email === 'abhinay.vadla@terratern.com';
 
-      // Verify user against admin_users table
-      const { data: adminRecord, error: adminError } = await supabase
-        .from('admin_users')
-        .select('role')
-        .eq('user_id', currentUser.id)
-        .maybeSingle();
+      // Parallel fetch for admin_users and app_settings
+      const [adminRes, settingRes] = await Promise.all([
+        supabase
+          .from('admin_users')
+          .select('role')
+          .eq('user_id', activeUser.id)
+          .maybeSingle(),
+        supabase
+          .from('app_settings')
+          .select('value')
+          .eq('key', 'master_kill_switch')
+          .maybeSingle(),
+      ]);
 
+      const adminRecord = adminRes.data;
+      const adminError = adminRes.error;
+
+      let determinedRole: AdminRole = 'viewer';
       if (isAbhinay) {
         setIsAuthorized(true);
+        determinedRole = 'owner';
         setUserRole('owner');
-        // Ensure admin_users in Supabase is updated to owner
         if (!adminRecord || adminRecord.role !== 'owner') {
           try {
             await supabase.from('admin_users').upsert({
-              user_id: currentUser.id,
+              user_id: activeUser.id,
               role: 'owner',
               updated_at: new Date().toISOString(),
             });
@@ -110,19 +134,24 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
         }
       } else if (adminError || !adminRecord) {
         setIsAuthorized(false);
+        determinedRole = 'viewer';
         setUserRole('viewer');
       } else {
         setIsAuthorized(true);
-        setUserRole(adminRecord.role as AdminRole);
+        determinedRole = adminRecord.role as AdminRole;
+        setUserRole(determinedRole);
       }
 
-      // Fetch master_kill_switch setting
-      const { data: settingRecord } = await supabase
-        .from('app_settings')
-        .select('value')
-        .eq('key', 'master_kill_switch')
-        .maybeSingle();
+      try {
+        sessionStorage.setItem('tt_admin_auth', JSON.stringify({
+          user: activeUser,
+          role: determinedRole,
+          authorized: isAbhinay ? true : !adminError && !!adminRecord,
+        }));
+      } catch {}
 
+      // Process master_kill_switch setting
+      const settingRecord = settingRes.data;
       if (settingRecord && settingRecord.value !== undefined) {
         const val = settingRecord.value;
         const isActive =
@@ -163,6 +192,7 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signOut = async () => {
+    try { sessionStorage.removeItem('tt_admin_auth'); } catch {}
     await supabase.auth.signOut();
     setUser(null);
     setIsAuthorized(false);

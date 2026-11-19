@@ -14,23 +14,31 @@ export async function OPTIONS(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   const { corsHeaders } = validateOriginAndCors(req);
+  const cacheHeaders = {
+    ...corsHeaders,
+    'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
+  };
 
   try {
     const supabase = getSupabaseServiceClient();
 
-    // 1. Fetch live pages from Supabase
-    const { data: dbPages, error: dbErr } = await supabase
-      .from('pages')
-      .select('id, name, slug, page_type, status, page_url, config, created_at')
-      .eq('status', 'live')
-      .order('created_at', { ascending: false });
+    // 1. Fetch live pages and testimonials in parallel for fast response
+    const [pagesRes, testSettingRes] = await Promise.all([
+      supabase
+        .from('pages')
+        .select('id, name, slug, page_type, status, page_url, config, created_at')
+        .eq('status', 'live')
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'public_testimonials')
+        .maybeSingle(),
+    ]);
 
-    // 2. Fetch testimonials from app_settings
-    const { data: testSetting } = await supabase
-      .from('app_settings')
-      .select('value')
-      .eq('key', 'public_testimonials')
-      .maybeSingle();
+    const dbPages = pagesRes.data;
+    const dbErr = pagesRes.error;
+    const testSetting = testSettingRes.data;
 
     let testimonials: TestimonialItem[] = SEED_TESTIMONIALS;
     if (testSetting?.value && Array.isArray(testSetting.value) && testSetting.value.length > 0) {
@@ -48,7 +56,7 @@ export async function GET(req: NextRequest) {
           testimonials,
           total: SEED_CALCULATORS.length,
         },
-        { headers: corsHeaders }
+        { headers: cacheHeaders }
       );
     }
 
@@ -145,7 +153,7 @@ export async function GET(req: NextRequest) {
         testimonials,
         total: activeCalculators.length,
       },
-      { headers: corsHeaders }
+      { headers: cacheHeaders }
     );
   } catch (err: any) {
     console.error('Error serving public directory:', err);
@@ -158,7 +166,7 @@ export async function GET(req: NextRequest) {
         testimonials: SEED_TESTIMONIALS,
         total: SEED_CALCULATORS.length,
       },
-      { headers: corsHeaders }
+      { headers: cacheHeaders }
     );
   }
 }

@@ -101,20 +101,6 @@ export function TerraTernLogo({
           priority
         />
       </div>
-      {(showBadge || subtitle) && (
-        <div className="flex flex-col justify-center">
-          {showBadge && (
-            <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-[#255CC1] border border-blue-200/80 rounded px-1.5 py-0.5">
-              Portal
-            </span>
-          )}
-          {subtitle && (
-            <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mt-[-2px]">
-              {subtitle}
-            </span>
-          )}
-        </div>
-      )}
     </div>
   );
 }

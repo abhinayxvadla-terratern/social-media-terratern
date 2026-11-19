@@ -249,23 +249,24 @@ export default function PagesManagementPage() {
       if (!cachedPages) setLoading(true);
       setError(null);
 
-      // Fetch pages
-      const { data: pagesData, error: pagesError } = await supabase
-        .from("pages")
-        .select("*, pdf_asset:assets(*)")
-        .order("created_at", { ascending: false });
+      // Fetch pages, page_stats, and leads counts in parallel for optimal speed
+      const [pagesRes, statsRes, leadCountsRes] = await Promise.all([
+        supabase
+          .from("pages")
+          .select("*, pdf_asset:assets(*)")
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("page_stats")
+          .select("page_id, views, leads, conversion_percentage"),
+        supabase
+          .from("leads")
+          .select("page_id"),
+      ]);
 
-      if (pagesError) throw pagesError;
-
-      // Fetch stats from page_stats view
-      const { data: statsData } = await supabase
-        .from("page_stats")
-        .select("page_id, views, leads, conversion_percentage");
-
-      // Also fetch leads counts directly for 100% data reliability
-      const { data: leadCountsData } = await supabase
-        .from("leads")
-        .select("page_id");
+      if (pagesRes.error) throw pagesRes.error;
+      const pagesData = pagesRes.data;
+      const statsData = statsRes.data;
+      const leadCountsData = leadCountsRes.data;
 
       const directLeadMap = new Map<string, number>();
       if (leadCountsData) {
