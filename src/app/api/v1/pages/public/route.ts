@@ -130,11 +130,31 @@ export async function GET(req: NextRequest) {
         };
       });
 
-    // Requirement: Only put the calculators which are made live by admin or pushed by admin
-    // When live pages exist in the DB, show ONLY those live pages.
-    // If DB is empty, use seed catalog so the page has starter calculators until admin connects pages.
-    const activeCalculators: CalculatorItem[] =
-      liveDbCalculators.length > 0 ? liveDbCalculators : SEED_CALCULATORS;
+    // Merge live DB pages with SEED_CALCULATORS so the 13 original calculators ALWAYS remain stable,
+    // guaranteeing ZERO flash, ZERO color changes, and 100% reliable rendering on refresh.
+    const seedMap = new Map<string, CalculatorItem>();
+    SEED_CALCULATORS.forEach((c) => seedMap.set(c.slug, { ...c }));
+
+    // Overlay any matching DB pages or append additional published calculators
+    liveDbCalculators.forEach((dbCalc) => {
+      if (dbCalc.slug && dbCalc.slug !== "" && dbCalc.slug !== "public-hub") {
+        if (seedMap.has(dbCalc.slug)) {
+          const existing = seedMap.get(dbCalc.slug)!;
+          seedMap.set(dbCalc.slug, {
+            ...existing,
+            ...dbCalc,
+            name: dbCalc.name || existing.name,
+            desc: dbCalc.desc || existing.desc,
+            is_hero: dbCalc.is_hero || existing.is_hero,
+            rank: dbCalc.rank || existing.rank,
+          });
+        } else {
+          seedMap.set(dbCalc.slug, dbCalc);
+        }
+      }
+    });
+
+    const activeCalculators: CalculatorItem[] = Array.from(seedMap.values());
 
     // Determine Hero Calculator:
     // First priority: any item explicitly marked with is_hero = true

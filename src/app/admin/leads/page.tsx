@@ -222,7 +222,18 @@ export default function LeadsManagementPage() {
       if (l.phone_e164) keys.push(`p:${l.phone_e164.trim()}`);
       if (l.email) keys.push(`e:${l.email.trim().toLowerCase()}`);
 
-      const pageTitle = cleanPageName(l.page?.name || l.page_id || "Direct");
+      const isHub =
+        l.page_id === "page_frontend_hub" ||
+        l.page_id === "public_hub" ||
+        l.page?.slug === "" ||
+        l.page?.slug === "public-hub" ||
+        l.utm?.page_origin === "frontend_hub" ||
+        (l.utm as any)?.calculator_name?.toLowerCase().includes("counselling") ||
+        (l.utm as any)?.calculator_name?.toLowerCase().includes("consultation") ||
+        (l.source || "").toLowerCase() === "website_hub" ||
+        ((l.source || "").toLowerCase() === "direct" && (!l.page?.slug || l.page?.slug === ""));
+
+      const pageTitle = isHub ? "Web Page" : cleanPageName(l.page?.name || l.page_id || "Direct");
 
       keys.forEach((k) => {
         if (!map[k]) {
@@ -789,17 +800,23 @@ export default function LeadsManagementPage() {
                       lead.page?.slug === "" ||
                       lead.page?.slug === "public-hub" ||
                       lead.utm?.page_origin === "frontend_hub" ||
-                      (lead.source || "").toLowerCase() === "website_hub";
-                    const formTag = getLeadFormTag(lead);
+                      (lead.utm as any)?.calculator_name?.toLowerCase().includes("counselling") ||
+                      (lead.utm as any)?.calculator_name?.toLowerCase().includes("consultation") ||
+                      (lead.source || "").toLowerCase() === "website_hub" ||
+                      ((lead.source || "").toLowerCase() === "direct" && (!lead.page?.slug || lead.page?.slug === ""));
+                    const isDirectMedium =
+                      isHubLead ||
+                      (lead.source || "").toLowerCase() === "website_hub" ||
+                      (lead.source || "").toLowerCase() === "direct";
 
                     return (
                       <div className="flex flex-col gap-2 pt-2 border-t border-slate-100">
                         <div className="flex items-center gap-1.5 flex-wrap text-xs">
                           <span className="font-bold text-slate-900">
-                            {isHubLead ? `web page (${formTag.title})` : cleanPageName(lead.page?.name || lead.quiz_result || "General Assessment")}
+                            {isHubLead ? "Web Page" : cleanPageName(lead.page?.name || lead.quiz_result || "General Assessment")}
                           </span>
                           <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 text-[9px] font-bold">
-                            {lead.source || "direct"}
+                            {isDirectMedium ? "Direct" : (lead.source || "Direct")}
                           </span>
                         </div>
 
@@ -868,27 +885,45 @@ export default function LeadsManagementPage() {
                 <tbody className="divide-y divide-slate-100">
                   {filteredLeads.map((lead) => {
                     const rawSource = (lead.source || lead.utm?.utm_source || "direct").toLowerCase();
-                    const mediumLabel =
-                      rawSource === "ig_dm"
-                        ? "Instagram DM"
-                        : rawSource === "ig_bio"
-                        ? "Instagram Bio"
-                        : rawSource === "wa_chat" || rawSource === "whatsapp"
-                        ? "WhatsApp"
-                        : rawSource === "fb_ad"
-                        ? "Facebook Ads"
-                        : rawSource === "yt_bio"
-                        ? "YouTube"
-                        : rawSource.charAt(0).toUpperCase() + rawSource.slice(1);
+                    const isHubLead =
+                      lead.page_id === "page_frontend_hub" ||
+                      lead.page_id === "public_hub" ||
+                      lead.page?.slug === "" ||
+                      lead.page?.slug === "public-hub" ||
+                      lead.utm?.page_origin === "frontend_hub" ||
+                      (lead.utm as any)?.calculator_name?.toLowerCase().includes("counselling") ||
+                      (lead.utm as any)?.calculator_name?.toLowerCase().includes("consultation") ||
+                      (lead.source || "").toLowerCase() === "website_hub" ||
+                      ((lead.source || "").toLowerCase() === "direct" && (!lead.page?.slug || lead.page?.slug === ""));
 
-                    const mediumBadgeClass =
-                      rawSource.includes("ig")
-                        ? "bg-purple-50 text-purple-700 border-purple-200"
-                        : rawSource.includes("wa")
-                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                        : rawSource.includes("fb")
-                        ? "bg-blue-50 text-blue-700 border-blue-200"
-                        : "bg-slate-100 text-slate-700 border-slate-200";
+                    const isDirectMedium =
+                      isHubLead ||
+                      rawSource === "website_hub" ||
+                      rawSource === "direct";
+
+                    const mediumLabel = isDirectMedium
+                      ? "Direct"
+                      : rawSource === "ig_dm"
+                      ? "Instagram DM"
+                      : rawSource === "ig_bio"
+                      ? "Instagram Bio"
+                      : rawSource === "wa_chat" || rawSource === "whatsapp"
+                      ? "WhatsApp"
+                      : rawSource === "fb_ad"
+                      ? "Facebook Ads"
+                      : rawSource === "yt_bio"
+                      ? "YouTube"
+                      : rawSource.charAt(0).toUpperCase() + rawSource.slice(1);
+
+                    const mediumBadgeClass = isDirectMedium
+                      ? "bg-slate-100 text-slate-700 border-slate-200"
+                      : rawSource.includes("ig")
+                      ? "bg-purple-50 text-purple-700 border-purple-200"
+                      : rawSource.includes("wa")
+                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                      : rawSource.includes("fb")
+                      ? "bg-blue-50 text-blue-700 border-blue-200"
+                      : "bg-slate-100 text-slate-700 border-slate-200";
 
                     const dateParts = formatDateParts(lead.created_at);
                     const displayName = cleanPageName(lead.page?.name || lead.quiz_result || "General Assessment");
@@ -942,62 +977,47 @@ export default function LeadsManagementPage() {
 
                         {/* 5. Page & Form Tag */}
                         <td className="py-3.5 px-3">
-                          {(() => {
-                            const isHubLead =
-                              lead.page_id === "page_frontend_hub" ||
-                              lead.page_id === "public_hub" ||
-                              lead.page?.slug === "" ||
-                              lead.page?.slug === "public-hub" ||
-                              lead.utm?.page_origin === "frontend_hub" ||
-                              (lead.source || "").toLowerCase() === "website_hub";
-                            const formTag = getLeadFormTag(lead);
-
-                            if (isHubLead) {
-                              return (
-                                <div>
-                                  <div className="truncate max-w-[240px] font-bold text-slate-900 text-xs" title={`web page (${formTag.title})`}>
-                                    <span>web page ({formTag.title})</span>
-                                  </div>
-                                  <div className="flex items-center gap-1.5 mt-0.5">
-                                    <a
-                                      href="/"
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      onClick={(e) => e.stopPropagation()}
-                                      className="inline-flex items-center gap-1 text-[11px] font-mono text-blue-700 hover:text-blue-900 hover:underline"
-                                    >
-                                      <span>/</span>
-                                      <ExternalLink className="w-2.5 h-2.5 text-slate-400" />
-                                    </a>
-                                  </div>
-                                </div>
-                              );
-                            }
-
-                            return (
-                              <div>
-                                <div className="truncate max-w-[240px] font-bold text-slate-900 text-xs" title={lead.page?.name || displayName}>
-                                  <span>{displayName}</span>
-                                </div>
-                                <div className="flex items-center gap-1.5 mt-0.5">
-                                  {lead.page?.slug ? (
-                                    <a
-                                      href={`/p/${lead.page.slug}`}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      onClick={(e) => e.stopPropagation()}
-                                      className="inline-flex items-center gap-1 text-[11px] font-mono text-blue-700 hover:text-blue-900 hover:underline"
-                                    >
-                                      <span>/{lead.page.slug}</span>
-                                      <ExternalLink className="w-2.5 h-2.5 text-slate-400" />
-                                    </a>
-                                  ) : (
-                                    <span className="text-slate-400 font-mono text-[11px]">/direct</span>
-                                  )}
-                                </div>
+                          {isHubLead ? (
+                            <div>
+                              <div className="truncate max-w-[240px] font-bold text-slate-900 text-xs" title="Web Page">
+                                <span>Web Page</span>
                               </div>
-                            );
-                          })()}
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <a
+                                  href="/"
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="inline-flex items-center gap-1 text-[11px] font-mono text-blue-700 hover:text-blue-900 hover:underline"
+                                >
+                                  <span>/</span>
+                                  <ExternalLink className="w-2.5 h-2.5 text-slate-400" />
+                                </a>
+                              </div>
+                            </div>
+                          ) : (
+                            <div>
+                              <div className="truncate max-w-[240px] font-bold text-slate-900 text-xs" title={lead.page?.name || displayName}>
+                                <span>{displayName}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                {lead.page?.slug ? (
+                                  <a
+                                    href={`/p/${lead.page.slug}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="inline-flex items-center gap-1 text-[11px] font-mono text-blue-700 hover:text-blue-900 hover:underline"
+                                  >
+                                    <span>/{lead.page.slug}</span>
+                                    <ExternalLink className="w-2.5 h-2.5 text-slate-400" />
+                                  </a>
+                                ) : (
+                                  <span className="text-slate-400 font-mono text-[11px]">/direct</span>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </td>
 
                         {/* 6. Source Medium */}
@@ -1058,9 +1078,17 @@ export default function LeadsManagementPage() {
           selectedLead.page_id === "page_frontend_hub" ||
           selectedLead.page_id === "public_hub" ||
           selectedLead.page?.slug === "" ||
+          selectedLead.page?.slug === "public-hub" ||
           selectedLead.utm?.page_origin === "frontend_hub" ||
-          (selectedLead.source || "").toLowerCase() === "website_hub";
-        const formTag = getLeadFormTag(selectedLead);
+          (selectedLead.utm as any)?.calculator_name?.toLowerCase().includes("counselling") ||
+          (selectedLead.utm as any)?.calculator_name?.toLowerCase().includes("consultation") ||
+          (selectedLead.source || "").toLowerCase() === "website_hub" ||
+          ((selectedLead.source || "").toLowerCase() === "direct" && (!selectedLead.page?.slug || selectedLead.page?.slug === ""));
+
+        const isDirect =
+          isHubLead ||
+          (selectedLead.source || "").toLowerCase() === "website_hub" ||
+          (selectedLead.source || "").toLowerCase() === "direct";
 
         return (
           <Modal
@@ -1068,7 +1096,7 @@ export default function LeadsManagementPage() {
             onClose={() => setSelectedLead(null)}
             title={selectedLead.name || "Lead Submission Details"}
             description={`Captured on ${formatDate(selectedLead.created_at)} via ${
-              isHubLead ? `web page (${formTag.title})` : (selectedLead.page?.name || "Lead Page")
+              isHubLead ? "Web Page" : (selectedLead.page?.name || "Lead Page")
             }`}
             maxWidth="xl"
           >
@@ -1078,7 +1106,7 @@ export default function LeadsManagementPage() {
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-slate-700">Origin:</span>
                   <span className="font-bold text-blue-900">
-                    {isHubLead ? `web page (${formTag.title})` : (selectedLead.page?.name || "Direct")}
+                    {isHubLead ? "Web Page" : (selectedLead.page?.name || "Direct")}
                   </span>
                   <code className="text-[11px] bg-white px-2 py-0.5 rounded border border-blue-200 text-blue-700 font-mono">
                     {isHubLead ? "/" : (selectedLead.page?.slug ? `/p/${selectedLead.page.slug}` : "/direct")}
@@ -1127,7 +1155,7 @@ export default function LeadsManagementPage() {
                   Acquisition Attribution
                 </span>
                 <div className="text-slate-700">
-                  Source: <strong>{selectedLead.source || "Direct"}</strong> &bull; Keyword:{" "}
+                  Source: <strong>{isDirect ? "Direct" : (selectedLead.source || "Direct")}</strong> &bull; Keyword:{" "}
                   <strong>{selectedLead.keyword || "None"}</strong>
                 </div>
               </div>

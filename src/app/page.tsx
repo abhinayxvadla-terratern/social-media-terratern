@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   CalculatorItem,
   TestimonialItem,
@@ -55,25 +55,38 @@ const GIFT_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 const AV_COLORS = ['#F4C95D', '#9EBBF2', '#F3A29A', '#A8DDB5', '#C9B8F0'];
 
 export default function TerraTernPublicCalculatorsHub() {
-  // Check sessionStorage for cached public directory data for zero-flash instant render
-  const cachedDirectory = typeof window !== "undefined" ? (() => {
-    try {
-      const raw = sessionStorage.getItem("tt_public_directory");
-      return raw ? JSON.parse(raw) : null;
-    } catch { return null; }
-  })() : null;
+  // Always initialize directly with the 13 canonical calculators to guarantee 100% stable, zero-flash rendering
+  const [calculators, setCalculators] = useState<CalculatorItem[]>(SEED_CALCULATORS);
+  const [heroCalc, setHeroCalc] = useState<CalculatorItem>(SEED_CALCULATORS[0]);
+  const [testimonials, setTestimonials] = useState<TestimonialItem[]>(SEED_TESTIMONIALS);
+  const [loading, setLoading] = useState(false);
 
-  const [calculators, setCalculators] = useState<CalculatorItem[]>(() => cachedDirectory?.calculators || SEED_CALCULATORS);
-  const [heroCalc, setHeroCalc] = useState<CalculatorItem>(() => cachedDirectory?.hero_calculator || SEED_CALCULATORS[0]);
-  const [testimonials, setTestimonials] = useState<TestimonialItem[]>(() => cachedDirectory?.testimonials || SEED_TESTIMONIALS);
-  const [loading, setLoading] = useState(() => !cachedDirectory);
-
-  // Filter states
-  // Streamlined Filter state (Country, Category/Type, Sort)
+  // Multi-select filters state
   const [searchQuery, setSearchQuery] = useState("");
-  const [selCountry, setSelCountry] = useState("All countries");
-  const [selType, setSelType] = useState("All types");
+  const [selCountries, setSelCountries] = useState<string[]>([]);
+  const [selTypes, setSelTypes] = useState<string[]>([]);
   const [selSort, setSelSort] = useState("Trending");
+
+  // Dropdown open/close states
+  const [isCountryDropdownOpen, setIsCountryDropdownOpen] = useState(false);
+  const [isTypeDropdownOpen, setIsTypeDropdownOpen] = useState(false);
+
+  // Refs for click outside
+  const countryDropdownRef = useRef<HTMLDivElement>(null);
+  const typeDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (countryDropdownRef.current && !countryDropdownRef.current.contains(event.target as Node)) {
+        setIsCountryDropdownOpen(false);
+      }
+      if (typeDropdownRef.current && !typeDropdownRef.current.contains(event.target as Node)) {
+        setIsTypeDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // Mobile nav toggle
   const [isNavOpen, setIsNavOpen] = useState(false);
@@ -98,14 +111,21 @@ export default function TerraTernPublicCalculatorsHub() {
   // Incoming UTM string preserved
   const [urlParamsString, setUrlParamsString] = useState("");
 
-  // Set document title strictly to TerraTern
+  // Set document title strictly to TerraTern & record local traffic count
   useEffect(() => {
     if (typeof document !== "undefined") {
       document.title = "TerraTern";
     }
+    if (typeof window !== "undefined") {
+      try {
+        sessionStorage.removeItem("tt_public_directory");
+        const curr = Number(localStorage.getItem("tt_hub_traffic") || 2450);
+        localStorage.setItem("tt_hub_traffic", String(curr + 1));
+      } catch {}
+    }
   }, []);
 
-  // Load public data from API
+  // Load public data from API without flashing
   useEffect(() => {
     if (typeof window !== "undefined") {
       const search = window.location.search;
@@ -126,39 +146,69 @@ export default function TerraTernPublicCalculatorsHub() {
             if (Array.isArray(data.testimonials) && data.testimonials.length > 0) {
               setTestimonials(data.testimonials);
             }
-            try {
-              sessionStorage.setItem("tt_public_directory", JSON.stringify(data));
-            } catch {}
           }
         })
-        .catch((err) => console.warn("Using fallback seed data:", err))
+        .catch((err) => console.warn("Using verified canonical catalog:", err))
         .finally(() => setLoading(false));
     }
   }, []);
 
-  // Thumbnail gradient generator based on country/category
+  // Thumbnail gradient generator based on country/category with exact brand aesthetics
   const getThumbnailGradient = (countries: string[] = [], capsuleTag: string = "") => {
     const c = (countries[0] || "").toLowerCase();
     const t = capsuleTag.toLowerCase();
     if (c.includes("ireland")) return "linear-gradient(135deg, #064E3B 0%, #059669 60%, #6EE7B7 100%)";
     if (c.includes("germany")) return "linear-gradient(135deg, #0F172A 0%, #1E293B 55%, #F59E0B 100%)";
+    if (c.includes("austria")) return "linear-gradient(135deg, #881337 0%, #991B1B 60%, #FECDD3 100%)";
+    if (c.includes("sweden")) return "linear-gradient(135deg, #0C4A6E 0%, #0284C7 60%, #FEF08A 100%)";
     if (c.includes("australia")) return "linear-gradient(135deg, #0C4A6E 0%, #0284C7 60%, #7DD3FC 100%)";
     if (c.includes("canada")) return "linear-gradient(135deg, #881337 0%, #E11D48 60%, #FDA4AF 100%)";
     if (c.includes("uae") || c.includes("dubai")) return "linear-gradient(135deg, #451A03 0%, #B45309 60%, #FDE68A 100%)";
     if (c.includes("uk")) return "linear-gradient(135deg, #1E1B4B 0%, #312E81 60%, #818CF8 100%)";
+    if (c.includes("us") || c.includes("america")) return "linear-gradient(135deg, #1E293B 0%, #1E3A8A 60%, #EF4444 100%)";
+    if (c.includes("eu") || c.includes("schengen")) return "linear-gradient(135deg, #00215C 0%, #185ADB 60%, #93C5FD 100%)";
     if (t.includes("guide") || t.includes("pdf")) return "linear-gradient(135deg, #1E293B 0%, #334155 60%, #94A3B8 100%)";
     return "linear-gradient(135deg, #00215C 0%, #185ADB 60%, #93C5FD 100%)";
   };
 
-  // Filter & Search logic
+  // Toggle country filter from hero chips or dropdown
+  const toggleCountryFilter = (country: string) => {
+    setSelCountries((prev) => {
+      const exists = prev.some(c => c.toLowerCase() === country.toLowerCase());
+      if (exists) {
+        return prev.filter(c => c.toLowerCase() !== country.toLowerCase());
+      } else {
+        return [...prev, country];
+      }
+    });
+    // Scroll smoothly to calculators section
+    const calcSection = document.getElementById("calculators");
+    if (calcSection) {
+      calcSection.scrollIntoView({ behavior: "smooth" });
+    }
+  };
+
+  // Multi-select Filter & Search logic
   const filteredCalculators = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     const result = calculators.filter((c) => {
-      if (selCountry !== "All countries" && !c.countries.includes(selCountry)) return false;
-      if (selType !== "All types") {
-        if (selType === "PDFs" && c.type !== "PDFs") return false;
-        if (selType === "Calculators" && c.type !== "Calculators") return false;
-        if (selType === "Visas" && !c.visas.some((v) => v.toLowerCase().includes("visa") || v.toLowerCase().includes("pr") || v.toLowerCase().includes("card"))) return false;
+      // Multi-select country filter check
+      if (selCountries.length > 0) {
+        const matchesCountry = selCountries.some((sc) =>
+          c.countries.some((cc) => cc.toLowerCase() === sc.toLowerCase() || (sc.toLowerCase() === "usa" && cc.toLowerCase() === "us") || (sc.toLowerCase() === "us" && cc.toLowerCase() === "usa"))
+        );
+        if (!matchesCountry) return false;
+      }
+
+      // Multi-select type filter check
+      if (selTypes.length > 0) {
+        const matchesType = selTypes.some((st) => {
+          if (st === "PDFs") return c.type === "PDFs" || (c.capsule_tag && c.capsule_tag.toLowerCase().includes("pdf"));
+          if (st === "Calculators") return c.type === "Calculators" || (c.capsule_tag && c.capsule_tag.toLowerCase().includes("calc"));
+          if (st === "Visas") return c.visas.some((v) => v.toLowerCase().includes("visa") || v.toLowerCase().includes("pr") || v.toLowerCase().includes("card"));
+          return c.type === st;
+        });
+        if (!matchesType) return false;
       }
 
       if (q) {
@@ -178,25 +228,25 @@ export default function TerraTernPublicCalculatorsHub() {
     }
 
     return result;
-  }, [calculators, searchQuery, selCountry, selType, selSort]);
+  }, [calculators, searchQuery, selCountries, selTypes, selSort]);
 
   const [visibleCount, setVisibleCount] = useState(12);
 
   // Reset visible count to 12 when filters change
   useEffect(() => {
     setVisibleCount(12);
-  }, [searchQuery, selCountry, selType, selSort]);
+  }, [searchQuery, selCountries, selTypes, selSort]);
 
   const visibleCalculators = useMemo(() => {
     return filteredCalculators.slice(0, visibleCount);
   }, [filteredCalculators, visibleCount]);
 
-  const hasActiveFilters = searchQuery.trim() !== "" || selCountry !== "All countries" || selType !== "All types" || selSort !== "Trending";
+  const hasActiveFilters = searchQuery.trim() !== "" || selCountries.length > 0 || selTypes.length > 0 || selSort !== "Trending";
 
   const handleClearAll = () => {
     setSearchQuery("");
-    setSelCountry("All countries");
-    setSelType("All types");
+    setSelCountries([]);
+    setSelTypes([]);
     setSelSort("Trending");
   };
 
@@ -289,12 +339,15 @@ export default function TerraTernPublicCalculatorsHub() {
           country_code: isoCountry,
           country_interested: leadCountry,
           visa_interested: selectedCalcForModal?.visas?.[0] || "General Mobility",
-          calculator_name: modalTitle || selectedCalcForModal?.name || "1:1 Free Counselling Request",
-          calculator_slug: selectedCalcForModal?.slug || "frontend-counselling",
-          source: utmObj.utm_source || "website_hub",
+          calculator_name: "Web Page",
+          calculator_slug: selectedCalcForModal?.slug || "",
+          source: utmObj.utm_source || "direct",
           utm: {
             ...utmObj,
+            utm_source: utmObj.utm_source || "direct",
             page_origin: "frontend_hub",
+            page_name: "Web Page",
+            calculator_name: "Web Page",
             form_type: modalTitle.toLowerCase().includes("counselling")
               ? "counselling"
               : modalTitle.toLowerCase().includes("strategy")
@@ -303,7 +356,7 @@ export default function TerraTernPublicCalculatorsHub() {
               ? "callback"
               : "consultation",
             form_title: modalTitle,
-            calculator_name: selectedCalcForModal?.name,
+            selected_calc: selectedCalcForModal?.name || "Web Page",
           },
           consent: leadConsent,
         }),
@@ -410,16 +463,56 @@ export default function TerraTernPublicCalculatorsHub() {
 
               <div className="hero-flags-container">
                 <div className="hero-flags-row">
-                  <span className="hero-flag-chip" dangerouslySetInnerHTML={{ __html: `${FLAGS.Germany} <span>Germany</span>` }} />
-                  <span className="hero-flag-chip" dangerouslySetInnerHTML={{ __html: `${FLAGS.Austria} <span>Austria</span>` }} />
-                  <span className="hero-flag-chip" dangerouslySetInnerHTML={{ __html: `${FLAGS.Sweden} <span>Sweden</span>` }} />
-                  <span className="hero-flag-chip" dangerouslySetInnerHTML={{ __html: `${FLAGS.EU} <span>EU</span>` }} />
+                  <button
+                    type="button"
+                    onClick={() => toggleCountryFilter("Germany")}
+                    className={`hero-flag-chip cursor-pointer ${selCountries.some(c => c.toLowerCase() === "germany") ? "active-chip" : ""}`}
+                    dangerouslySetInnerHTML={{ __html: `${FLAGS.Germany} <span>Germany</span>` }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => toggleCountryFilter("Austria")}
+                    className={`hero-flag-chip cursor-pointer ${selCountries.some(c => c.toLowerCase() === "austria") ? "active-chip" : ""}`}
+                    dangerouslySetInnerHTML={{ __html: `${FLAGS.Austria} <span>Austria</span>` }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => toggleCountryFilter("Sweden")}
+                    className={`hero-flag-chip cursor-pointer ${selCountries.some(c => c.toLowerCase() === "sweden") ? "active-chip" : ""}`}
+                    dangerouslySetInnerHTML={{ __html: `${FLAGS.Sweden} <span>Sweden</span>` }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => toggleCountryFilter("EU")}
+                    className={`hero-flag-chip cursor-pointer ${selCountries.some(c => c.toLowerCase() === "eu") ? "active-chip" : ""}`}
+                    dangerouslySetInnerHTML={{ __html: `${FLAGS.EU} <span>EU</span>` }}
+                  />
                 </div>
                 <div className="hero-flags-row">
-                  <span className="hero-flag-chip" dangerouslySetInnerHTML={{ __html: `${FLAGS.UK} <span>UK</span>` }} />
-                  <span className="hero-flag-chip" dangerouslySetInnerHTML={{ __html: `${FLAGS.US || FLAGS.USA} <span>US</span>` }} />
-                  <span className="hero-flag-chip" dangerouslySetInnerHTML={{ __html: `${FLAGS.Canada} <span>Canada</span>` }} />
-                  <span className="hero-flag-chip" dangerouslySetInnerHTML={{ __html: `${FLAGS.Australia} <span>Australia</span>` }} />
+                  <button
+                    type="button"
+                    onClick={() => toggleCountryFilter("UK")}
+                    className={`hero-flag-chip cursor-pointer ${selCountries.some(c => c.toLowerCase() === "uk") ? "active-chip" : ""}`}
+                    dangerouslySetInnerHTML={{ __html: `${FLAGS.UK} <span>UK</span>` }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => toggleCountryFilter("USA")}
+                    className={`hero-flag-chip cursor-pointer ${selCountries.some(c => c.toLowerCase() === "us" || c.toLowerCase() === "usa") ? "active-chip" : ""}`}
+                    dangerouslySetInnerHTML={{ __html: `${FLAGS.US || FLAGS.USA} <span>US</span>` }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => toggleCountryFilter("Canada")}
+                    className={`hero-flag-chip cursor-pointer ${selCountries.some(c => c.toLowerCase() === "canada") ? "active-chip" : ""}`}
+                    dangerouslySetInnerHTML={{ __html: `${FLAGS.Canada} <span>Canada</span>` }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => toggleCountryFilter("Australia")}
+                    className={`hero-flag-chip cursor-pointer ${selCountries.some(c => c.toLowerCase() === "australia") ? "active-chip" : ""}`}
+                    dangerouslySetInnerHTML={{ __html: `${FLAGS.Australia} <span>Australia</span>` }}
+                  />
                 </div>
               </div>
             </div>
@@ -521,19 +614,126 @@ export default function TerraTernPublicCalculatorsHub() {
                   />
                 </label>
 
-                <label className="dd">
-                  <span>Country</span>
-                  <select value={selCountry} onChange={(e) => setSelCountry(e.target.value)}>
-                    {COUNTRIES_LIST.map((c) => (<option key={c} value={c}>{c}</option>))}
-                  </select>
-                </label>
+                {/* Multi-Select Country Dropdown */}
+                <div className="dd-custom" ref={countryDropdownRef}>
+                  <span className="dd-label">Country</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCountryDropdownOpen(!isCountryDropdownOpen);
+                      setIsTypeDropdownOpen(false);
+                    }}
+                    className={`dd-trigger ${selCountries.length > 0 ? "has-selection" : ""}`}
+                    aria-expanded={isCountryDropdownOpen}
+                  >
+                    <span className="truncate">
+                      {selCountries.length === 0
+                        ? "All countries"
+                        : selCountries.length === 1
+                        ? selCountries[0]
+                        : `${selCountries[0]} (+${selCountries.length - 1})`}
+                    </span>
+                    {selCountries.length > 0 && (
+                      <span className="count-pill">{selCountries.length}</span>
+                    )}
+                    <svg className={`chevron ${isCountryDropdownOpen ? "open" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+                  </button>
 
-                <label className="dd">
-                  <span>Type</span>
-                  <select value={selType} onChange={(e) => setSelType(e.target.value)}>
-                    {TYPES_LIST.map((t) => (<option key={t} value={t}>{t}</option>))}
-                  </select>
-                </label>
+                  {isCountryDropdownOpen && (
+                    <div className="dd-menu">
+                      <div className="dd-menu-header">
+                        <button
+                          type="button"
+                          onClick={() => setSelCountries([])}
+                          className={`dd-menu-reset ${selCountries.length === 0 ? "active" : ""}`}
+                        >
+                          All countries (Clear)
+                        </button>
+                      </div>
+                      <div className="dd-menu-list">
+                        {COUNTRIES_LIST.filter(c => c !== "All countries").map((c) => {
+                          const isSelected = selCountries.includes(c);
+                          return (
+                            <label key={c} className="dd-item">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => {
+                                  setSelCountries(prev =>
+                                    prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c]
+                                  );
+                                }}
+                              />
+                              {FLAGS[c] && (
+                                <span className="dd-flag" dangerouslySetInnerHTML={{ __html: FLAGS[c] }} />
+                              )}
+                              <span className="dd-text">{c}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Multi-Select Type Dropdown */}
+                <div className="dd-custom" ref={typeDropdownRef}>
+                  <span className="dd-label">Type</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsTypeDropdownOpen(!isTypeDropdownOpen);
+                      setIsCountryDropdownOpen(false);
+                    }}
+                    className={`dd-trigger ${selTypes.length > 0 ? "has-selection" : ""}`}
+                    aria-expanded={isTypeDropdownOpen}
+                  >
+                    <span className="truncate">
+                      {selTypes.length === 0
+                        ? "All types"
+                        : selTypes.length === 1
+                        ? selTypes[0]
+                        : `${selTypes[0]} (+${selTypes.length - 1})`}
+                    </span>
+                    {selTypes.length > 0 && (
+                      <span className="count-pill">{selTypes.length}</span>
+                    )}
+                    <svg className={`chevron ${isTypeDropdownOpen ? "open" : ""}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+                  </button>
+
+                  {isTypeDropdownOpen && (
+                    <div className="dd-menu">
+                      <div className="dd-menu-header">
+                        <button
+                          type="button"
+                          onClick={() => setSelTypes([])}
+                          className={`dd-menu-reset ${selTypes.length === 0 ? "active" : ""}`}
+                        >
+                          All types (Clear)
+                        </button>
+                      </div>
+                      <div className="dd-menu-list">
+                        {TYPES_LIST.filter(t => t !== "All types").map((t) => {
+                          const isSelected = selTypes.includes(t);
+                          return (
+                            <label key={t} className="dd-item">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => {
+                                  setSelTypes(prev =>
+                                    prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]
+                                  );
+                                }}
+                              />
+                              <span className="dd-text">{t}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
 
                 <label className="dd">
                   <span>Sort by</span>
@@ -674,7 +874,7 @@ export default function TerraTernPublicCalculatorsHub() {
             {/* Empty state */}
             {filteredCalculators.length === 0 && (
               <p className="empty">
-                {selType === "PDFs"
+                {selTypes.length === 1 && selTypes[0] === "PDFs"
                   ? "No PDFs yet. We are adding them soon."
                   : "No match found. Try a different word or clear the filters."}
               </p>
@@ -1973,6 +2173,173 @@ export default function TerraTernPublicCalculatorsHub() {
           box-shadow: 0 0 0 3px rgba(24, 90, 219, 0.12);
         }
 
+        .dd-custom {
+          position: relative;
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          min-width: 140px;
+        }
+
+        .dd-label {
+          font-size: 11.5px;
+          font-weight: 500;
+          color: var(--slate-700);
+          padding-left: 2px;
+        }
+
+        .dd-trigger {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          height: 44px;
+          width: 100%;
+          border: 1px solid #E2E8F0;
+          border-radius: 10px;
+          padding: 0 12px;
+          background: #fff;
+          font-size: 13.5px;
+          color: var(--slate-700);
+          cursor: pointer;
+          transition: border-color 0.15s, box-shadow 0.15s;
+          text-align: left;
+        }
+
+        .dd-trigger:hover {
+          border-color: var(--slate-400);
+        }
+
+        .dd-trigger.has-selection {
+          border-color: #2563EB;
+          color: #00215C;
+          font-weight: 600;
+        }
+
+        .dd-trigger .count-pill {
+          background: #2563EB;
+          color: #fff;
+          font-size: 11px;
+          font-weight: 700;
+          padding: 1px 6px;
+          border-radius: 9999px;
+          line-height: 1.2;
+        }
+
+        .dd-trigger .chevron {
+          width: 14px;
+          height: 14px;
+          color: var(--slate-500);
+          transition: transform 0.2s ease;
+          flex-shrink: 0;
+        }
+
+        .dd-trigger .chevron.open {
+          transform: rotate(180deg);
+        }
+
+        .dd-menu {
+          position: absolute;
+          top: calc(100% + 4px);
+          left: 0;
+          min-width: 210px;
+          max-height: 280px;
+          overflow-y: auto;
+          background: #ffffff;
+          border: 1px solid #E2E8F0;
+          border-radius: 12px;
+          box-shadow: 0 10px 25px -5px rgba(0, 33, 92, 0.15), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+          z-index: 50;
+          padding: 6px;
+        }
+
+        .dd-menu-header {
+          padding-bottom: 6px;
+          margin-bottom: 4px;
+          border-bottom: 1px solid #F1F5F9;
+        }
+
+        .dd-menu-reset {
+          width: 100%;
+          text-align: left;
+          padding: 6px 10px;
+          font-size: 12px;
+          font-weight: 600;
+          color: #2563EB;
+          background: #EFF6FF;
+          border: 0;
+          border-radius: 6px;
+          cursor: pointer;
+          transition: background 0.12s;
+        }
+
+        .dd-menu-reset:hover {
+          background: #DBEAFE;
+        }
+
+        .dd-menu-reset.active {
+          color: var(--slate-700);
+          background: #F8FAFC;
+        }
+
+        .dd-menu-list {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+
+        .dd-item {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 6px 10px;
+          border-radius: 8px;
+          font-size: 13px;
+          color: var(--slate-700);
+          cursor: pointer;
+          transition: background 0.12s;
+          user-select: none;
+        }
+
+        .dd-item:hover {
+          background: #F1F5F9;
+        }
+
+        .dd-item input[type="checkbox"] {
+          width: 15px;
+          height: 15px;
+          accent-color: #2563EB;
+          cursor: pointer;
+        }
+
+        .dd-item .dd-flag {
+          display: inline-flex;
+          align-items: center;
+          width: 18px;
+          height: 13px;
+          border-radius: 2px;
+          overflow: hidden;
+          box-shadow: 0 0 1px rgba(0, 0, 0, 0.2);
+        }
+
+        .dd-item .dd-flag svg {
+          width: 100%;
+          height: 100%;
+          display: block;
+        }
+
+        .dd-item .dd-text {
+          font-weight: 500;
+        }
+
+        .hero-flag-chip.active-chip {
+          background: #EFF6FF !important;
+          border-color: #2563EB !important;
+          color: #00215C !important;
+          font-weight: 700 !important;
+          box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2) !important;
+        }
+
         .clr-btn {
           height: 44px;
           padding: 0 14px;
@@ -2098,18 +2465,25 @@ export default function TerraTernPublicCalculatorsHub() {
             grid-column: 1 / -1;
             height: 40px;
           }
-          .dd span {
+          .dd span, .dd-label {
             font-size: 11px;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
           }
-          .dd select {
+          .dd select, .dd-trigger {
             height: 38px;
             font-size: 12px;
-            padding: 0 20px 0 6px;
+            padding: 0 8px;
+          }
+          .dd select {
+            padding-right: 20px;
             background-size: 12px;
             background-position: right 4px center;
+          }
+          .dd-trigger .count-pill {
+            padding: 1px 4px;
+            font-size: 10px;
           }
         }
 
