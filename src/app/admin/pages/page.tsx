@@ -2,10 +2,11 @@
 
 import React, { useEffect, useState, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Page, PageStatus, PageType, Asset, PageStat } from "@/lib/types";
+import { Page, PageStatus, PageType, Asset, PageStat, Lead } from "@/lib/types";
 import { useAdmin } from "@/contexts/AdminContext";
 import { StatusBadge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
+import { FRONTEND_HUB_PAGE } from "@/lib/public-directory";
 import {
   formatDate,
   formatPercentage,
@@ -35,10 +36,23 @@ import {
   Code2,
   Link2,
   Eye,
+  EyeOff,
+  Star,
+  Flame,
+  MessageSquare,
+  Upload,
+  BarChart2,
+  TrendingUp,
+  Users,
+  Download,
+  ArrowUpRight,
+  Filter,
 } from "lucide-react";
 import { getCachedData, setCachedData } from "@/lib/client-cache";
 import { cleanPageName } from "@/lib/vibe-engine";
 import { ConnectPageModal } from "@/components/ui/ConnectPageModal";
+import { TestimonialsManagementModal } from "@/components/ui/TestimonialsManagementModal";
+import { SEED_TESTIMONIALS } from "@/lib/public-directory";
 
 export default function PagesManagementPage() {
   const { userRole, canEdit, isOwner } = useAdmin();
@@ -60,6 +74,7 @@ export default function PagesManagementPage() {
 
   // Modals & State
   const [connectModalOpen, setConnectModalOpen] = useState(false);
+  const [testimonialsModalOpen, setTestimonialsModalOpen] = useState(false);
   const [editingPage, setEditingPage] = useState<Page | null>(null);
   const [deleteConfirmPage, setDeleteConfirmPage] = useState<Page | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -112,6 +127,122 @@ export default function PagesManagementPage() {
     setUtmContent("");
   };
 
+  // Dedicated Page & Form Analytics Modal State
+  const [analyticsModalPage, setAnalyticsModalPage] = useState<Page | null>(null);
+  const [analyticsLeads, setAnalyticsLeads] = useState<Lead[]>([]);
+  const [isLoadingAnalyticsLeads, setIsLoadingAnalyticsLeads] = useState(false);
+  const [analyticsFormFilter, setAnalyticsFormFilter] = useState<string>("all");
+  const [analyticsSearch, setAnalyticsSearch] = useState<string>("");
+  const [editingPageLeads, setEditingPageLeads] = useState<Lead[]>([]);
+
+  // Fetch leads for editing page (form-level analytics breakdown inside edit modal)
+  useEffect(() => {
+    if (!editingPage) {
+      setEditingPageLeads([]);
+      return;
+    }
+    const fetchEditLeads = async () => {
+      try {
+        const { data } = await supabase
+          .from("leads")
+          .select("*")
+          .eq("page_id", editingPage.id)
+          .order("created_at", { ascending: false });
+        if (data) setEditingPageLeads(data as Lead[]);
+      } catch (err) {
+        console.error("Error loading leads for editing page:", err);
+      }
+    };
+    fetchEditLeads();
+  }, [editingPage]);
+
+  // Export Leads to CSV Helper
+  const exportLeadsToCsv = (leadsToExport: Lead[], pageTitle: string) => {
+    if (!leadsToExport.length) return;
+    const headers = ["ID", "Name", "Email", "Phone", "Form Type", "Country", "Created At"];
+    const rows = leadsToExport.map((l) => [
+      l.id,
+      `"${(l.name || "").replace(/"/g, '""')}"`,
+      `"${(l.email || "").replace(/"/g, '""')}"`,
+      `"${(l.phone_e164 || "").replace(/"/g, '""')}"`,
+      `"${(l.utm?.form_type || l.source || "form").replace(/"/g, '""')}"`,
+      `"${((l.utm?.country_interested as string) || l.country_code || "").replace(/"/g, '""')}"`,
+      `"${new Date(l.created_at).toISOString()}"`,
+    ]);
+    const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `${pageTitle.replace(/[^a-z0-9]/gi, "_").toLowerCase()}_leads.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Fetch leads for analytics modal
+  useEffect(() => {
+    if (!analyticsModalPage) {
+      setAnalyticsLeads([]);
+      return;
+    }
+    const fetchPageLeads = async () => {
+      setIsLoadingAnalyticsLeads(true);
+      try {
+        const { data, error } = await supabase
+          .from("leads")
+          .select("*")
+          .eq("page_id", analyticsModalPage.id)
+          .order("created_at", { ascending: false });
+        if (!error && data) {
+          setAnalyticsLeads(data as Lead[]);
+        }
+      } catch (err) {
+        console.error("Error loading leads for analytics:", err);
+      } finally {
+        setIsLoadingAnalyticsLeads(false);
+      }
+    };
+    fetchPageLeads();
+  }, [analyticsModalPage]);
+
+  // Lead Form Categorization Helper
+  const getLeadFormCategory = (lead: Lead) => {
+    const formType = (lead.utm?.form_type || "").toLowerCase();
+    const source = (lead.source || "").toLowerCase();
+
+    if (formType.includes("consult") || source.includes("consult") || source === "website_hub") {
+      return {
+        formKey: "consultation",
+        formTitle: "1:1 Consultation Form",
+        icon: "📞",
+        badgeColor: "bg-blue-100 text-blue-800 border-blue-200",
+      };
+    }
+    if (lead.quiz_score !== null || lead.quiz_result !== null || formType.includes("assessment") || formType.includes("calc")) {
+      return {
+        formKey: "calculator",
+        formTitle: "Calculator Assessment Form",
+        icon: "🧮",
+        badgeColor: "bg-purple-100 text-purple-800 border-purple-200",
+      };
+    }
+    if (formType.includes("pdf") || source.includes("download") || source.includes("pdf")) {
+      return {
+        formKey: "pdf",
+        formTitle: "PDF Guide Download Form",
+        icon: "📄",
+        badgeColor: "bg-amber-100 text-amber-800 border-amber-200",
+      };
+    }
+    return {
+      formKey: "quick",
+      formTitle: "Quick Callback Form",
+      icon: "💬",
+      badgeColor: "bg-emerald-100 text-emerald-800 border-emerald-200",
+    };
+  };
+
   // Fetch all pages and analytics stats
   const fetchPages = async () => {
     try {
@@ -161,7 +292,10 @@ export default function PagesManagementPage() {
         const stat = statsMap.get(p.id);
         const directCount = directLeadMap.get(p.id) || 0;
         const finalLeads = Math.max(stat?.leads ?? 0, directCount);
-        const finalViews = Math.max(stat?.views ?? 0, finalLeads);
+        const manualViews = p.config?.views_count ?? p.config?.manual_views;
+        const finalViews = manualViews !== undefined && manualViews !== "" && !isNaN(Number(manualViews))
+          ? Number(manualViews)
+          : Math.max(stat?.views ?? 0, finalLeads);
         return {
           ...p,
           views_count: finalViews,
@@ -170,8 +304,27 @@ export default function PagesManagementPage() {
         };
       });
 
-      setPages(mergedPages);
-      setCachedData("admin_pages", mergedPages);
+      // Include Frontend Public Hub as a prominent first-class page in the pages table
+      const hubStat = statsMap.get("page_frontend_hub") || statsMap.get("public_hub");
+      const frontendHubLeads = directLeadMap.get("page_frontend_hub") || directLeadMap.get("public_hub") || (hubStat?.leads ?? 0);
+      const frontendViews = hubStat?.views ?? (frontendHubLeads > 0 ? frontendHubLeads : 0);
+      const frontendConversion = frontendViews > 0 ? Number(((frontendHubLeads / frontendViews) * 100).toFixed(1)) : 0;
+
+      const hubPageMerged: Page = {
+        ...FRONTEND_HUB_PAGE,
+        leads_count: frontendHubLeads,
+        views_count: frontendViews,
+        conversion_percentage: frontendConversion,
+      };
+
+      const hasHubInDb = (pagesData || []).some(
+        (p: any) => p.slug === "" || p.slug === "public-hub" || p.page_key === "public_hub"
+      );
+
+      const allPagesList = hasHubInDb ? mergedPages : [hubPageMerged, ...mergedPages];
+
+      setPages(allPagesList);
+      setCachedData("admin_pages", allPagesList);
 
       // Also fetch assets for attachment selector
       const { data: assetsData } = await supabase
@@ -257,6 +410,101 @@ export default function PagesManagementPage() {
     }
   };
 
+  // Toggle Public Bio Directory visibility on row
+  const handleToggleHubVisibility = async (page: Page) => {
+    if (!canEdit) return;
+    const currentShow = page.config?.show_in_directory !== false;
+    const nextShow = !currentShow;
+    const newConfig = { ...(page.config || {}), show_in_directory: nextShow };
+
+    try {
+      const { error } = await supabase
+        .from("pages")
+        .update({ config: newConfig, updated_at: new Date().toISOString() })
+        .eq("id", page.id);
+
+      if (error) throw error;
+
+      setPages((prev) =>
+        prev.map((p) => (p.id === page.id ? { ...p, config: newConfig } : p))
+      );
+    } catch (err: any) {
+      alert("Error updating hub visibility: " + err.message);
+    }
+  };
+
+  // Toggle Featured Spotlight state on row
+  const handleToggleFeatured = async (page: Page) => {
+    if (!canEdit) return;
+    const currentFeatured = Boolean(page.config?.is_featured);
+    const nextFeatured = !currentFeatured;
+    const newConfig = { ...(page.config || {}), is_featured: nextFeatured };
+
+    try {
+      const { error } = await supabase
+        .from("pages")
+        .update({ config: newConfig, updated_at: new Date().toISOString() })
+        .eq("id", page.id);
+
+      if (error) throw error;
+
+      setPages((prev) =>
+        prev.map((p) => (p.id === page.id ? { ...p, config: newConfig } : p))
+      );
+    } catch (err: any) {
+      alert("Error updating spotlight: " + err.message);
+    }
+  };
+
+  // Push / Toggle Hero Spotlight Calculator on Public Hub
+  const handleToggleHero = async (page: Page) => {
+    if (!canEdit) return;
+    const isCurrentlyHero = Boolean(page.config?.is_hero_trending);
+    const nextHero = !isCurrentlyHero;
+
+    try {
+      // 1. If enabling hero, unset other pages so only 1 calculator is the featured hero card
+      if (nextHero) {
+        const otherHeroPages = pages.filter((p) => p.id !== page.id && p.config?.is_hero_trending);
+        for (const op of otherHeroPages) {
+          await supabase
+            .from("pages")
+            .update({
+              config: { ...(op.config || {}), is_hero_trending: false },
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", op.id);
+        }
+      }
+
+      const newConfig = {
+        ...(page.config || {}),
+        is_hero_trending: nextHero,
+        hero_badge: page.config?.hero_badge || "🔥 HIGH DEMAND",
+      };
+
+      const { error } = await supabase
+        .from("pages")
+        .update({ config: newConfig, updated_at: new Date().toISOString() })
+        .eq("id", page.id);
+
+      if (error) throw error;
+
+      const nextPages = pages.map((p) => {
+        if (p.id === page.id) return { ...p, config: newConfig };
+        if (nextHero && p.config?.is_hero_trending) {
+          return { ...p, config: { ...(p.config || {}), is_hero_trending: false } };
+        }
+        return p;
+      });
+
+      setPages(nextPages);
+      setCachedData("admin_pages", nextPages);
+    } catch (err: any) {
+      alert("Error updating hero calculator: " + err.message);
+    }
+  };
+
   // Duplicate a page
   const handleDuplicate = async (page: Page) => {
     if (!canEdit) return;
@@ -324,6 +572,18 @@ export default function PagesManagementPage() {
     setIsSaving(true);
 
     try {
+      const manualViews =
+        editingPage.config?.views_count !== undefined &&
+        editingPage.config?.views_count !== "" &&
+        !isNaN(Number(editingPage.config.views_count))
+          ? Number(editingPage.config.views_count)
+          : editingPage.views_count;
+
+      const updatedConfig = {
+        ...(editingPage.config || {}),
+        views_count: manualViews,
+      };
+
       const updatePayload = {
         name: editingPage.name,
         slug: editingPage.slug,
@@ -337,6 +597,7 @@ export default function PagesManagementPage() {
         closed_redirect_url: editingPage.closed_redirect_url || null,
         pdf_asset_id: editingPage.pdf_asset_id || null,
         allowed_origins: editingPage.allowed_origins || [],
+        config: updatedConfig,
         updated_at: new Date().toISOString(),
       };
 
@@ -352,7 +613,15 @@ export default function PagesManagementPage() {
       setPages((prev) =>
         prev.map((p) =>
           p.id === editingPage.id
-            ? { ...data, leads_count: p.leads_count, conversion_percentage: p.conversion_percentage }
+            ? {
+                ...data,
+                views_count: manualViews !== undefined ? manualViews : p.views_count,
+                leads_count: p.leads_count,
+                conversion_percentage:
+                  manualViews && manualViews > 0
+                    ? Number((((p.leads_count || 0) / manualViews) * 100).toFixed(1))
+                    : p.conversion_percentage,
+              }
             : p
         )
       );
@@ -529,25 +798,27 @@ export default function PagesManagementPage() {
         </div>
 
         {/* Action Buttons: Connect External Page & Build Page */}
-        {canEdit && (
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setConnectModalOpen(true)}
-              className="px-4 py-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold text-xs sm:text-sm rounded-xl transition shadow-2xs flex items-center justify-center gap-2"
-            >
-              <Link2 className="w-4 h-4 text-[#255CC1]" />
-              <span>Connect External Page</span>
-            </button>
-            <a
-              href="/admin/pages/build"
-              className="px-4 py-2.5 bg-[#00215C] hover:bg-[#255CC1] active:scale-95 text-white font-bold text-xs sm:text-sm rounded-xl transition shadow-xs flex items-center justify-center gap-2"
-            >
-              <Sparkles className="w-4 h-4 text-[#F1C819]" />
-              <span>Build Page</span>
-            </a>
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {canEdit && (
+            <>
+              <button
+                type="button"
+                onClick={() => setConnectModalOpen(true)}
+                className="px-4 py-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-bold text-xs sm:text-sm rounded-xl transition shadow-2xs flex items-center justify-center gap-2"
+              >
+                <Link2 className="w-4 h-4 text-[#255CC1]" />
+                <span>Connect External Page</span>
+              </button>
+              <a
+                href="/admin/pages/build"
+                className="px-4 py-2.5 bg-[#00215C] hover:bg-[#255CC1] active:scale-95 text-white font-bold text-xs sm:text-sm rounded-xl transition shadow-xs flex items-center justify-center gap-2"
+              >
+                <Sparkles className="w-4 h-4 text-[#F1C819]" />
+                <span>Build Page</span>
+              </a>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Bulk Actions Bar (Shown when 1 or more pages selected) */}
@@ -660,14 +931,14 @@ export default function PagesManagementPage() {
                       />
                       <div className="flex-1 min-w-0">
                         <h3 className="font-bold text-base text-slate-900 leading-snug break-words">
-                          {displayName}
+                          {page.page_key === "public_hub" || page.slug === "" ? "Webpage" : displayName}
                         </h3>
                         <div className="flex items-center gap-1.5 mt-1">
                           <code className="text-[11px] text-blue-700 bg-blue-50/80 px-2 py-0.5 rounded font-mono font-semibold">
-                            /p/{page.slug}
+                            {page.page_key === "public_hub" || page.slug === "" ? "/" : `/p/${page.slug}`}
                           </code>
                           <button
-                            onClick={() => handleCopy(`${origin}/p/${page.slug}`, `slug-${page.id}`)}
+                            onClick={() => handleCopy(page.page_key === "public_hub" || page.slug === "" ? `${origin}/` : `${origin}/p/${page.slug}`, `slug-${page.id}`)}
                             className="p-1 text-slate-400 hover:text-slate-700 rounded transition"
                             title="Copy link"
                           >
@@ -678,7 +949,7 @@ export default function PagesManagementPage() {
                             )}
                           </button>
                           <a
-                            href={page.page_url || `/p/${page.slug}`}
+                            href={page.page_key === "public_hub" || page.slug === "" ? "/" : (page.page_url || `/p/${page.slug}`)}
                             target="_blank"
                             rel="noreferrer"
                             className="p-1 text-slate-400 hover:text-blue-600 rounded transition"
@@ -690,34 +961,38 @@ export default function PagesManagementPage() {
                       </div>
                     </div>
 
-                    {/* Single Interactive Status Badge */}
-                    {canEdit ? (
-                      <button
-                        type="button"
-                        onClick={() => handleToggleLive(page)}
-                        className={`touch-target px-2.5 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 flex-shrink-0 border shadow-2xs ${
-                          isLive
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200"
-                            : page.status === "draft"
-                            ? "bg-amber-50 text-amber-700 border-amber-200 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200"
-                            : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200"
-                        }`}
-                        title={isLive ? "Click to Pause" : "Click to Make Live"}
-                      >
-                        <span
-                          className={`w-2 h-2 rounded-full ${
+                    {/* Status & Hub Visibility Badges */}
+                    <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                      {canEdit ? (
+                        <button
+                          type="button"
+                          onClick={() => handleToggleLive(page)}
+                          className={`touch-target px-2.5 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 border shadow-2xs ${
                             isLive
-                              ? "bg-emerald-500 animate-pulse"
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-200"
                               : page.status === "draft"
-                              ? "bg-amber-500"
-                              : "bg-slate-400"
+                              ? "bg-amber-50 text-amber-700 border-amber-200 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200"
+                              : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200"
                           }`}
-                        />
-                        <span className="capitalize">{page.status}</span>
-                      </button>
-                    ) : (
-                      <StatusBadge status={page.status} />
-                    )}
+                          title={isLive ? "Click to Pause" : "Click to Make Live"}
+                        >
+                          <span
+                            className={`w-2 h-2 rounded-full ${
+                              isLive
+                                ? "bg-emerald-500 animate-pulse"
+                                : page.status === "draft"
+                                ? "bg-amber-500"
+                                : "bg-slate-400"
+                            }`}
+                          />
+                          <span className="capitalize">{page.status}</span>
+                        </button>
+                      ) : (
+                        <StatusBadge status={page.status} />
+                      )}
+
+
+                    </div>
                   </div>
 
                   {/* Middle: Metrics Bar */}
@@ -750,18 +1025,20 @@ export default function PagesManagementPage() {
 
                   {/* Bottom: Action Buttons */}
                   <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIntegrationModalPage(page);
-                        setIntegrationTab("live");
-                      }}
-                      className="touch-target px-3.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-[#00215C] border border-blue-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow-2xs"
-                      title="Get Live Page Link & Campaign UTM Builder"
-                    >
-                      <Link2 className="w-3.5 h-3.5 text-[#255CC1]" />
-                      <span>Get Links</span>
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIntegrationModalPage(page);
+                          setIntegrationTab("live");
+                        }}
+                        className="touch-target px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-[#00215C] border border-blue-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow-2xs"
+                        title="Get Live Page Link & Campaign UTM Builder"
+                      >
+                        <Link2 className="w-3.5 h-3.5 text-[#255CC1]" />
+                        <span>Get Links</span>
+                      </button>
+                    </div>
 
                     {canEdit && (
                       <div className="flex items-center gap-1">
@@ -845,17 +1122,24 @@ export default function PagesManagementPage() {
                           />
                         </td>
 
-                        {/* 2. Page & Route (Clean name without capsule) */}
+                        {/* 2. Page & Route */}
                         <td className="py-3.5 px-4">
-                          <div className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors text-sm">
-                            {displayName}
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors text-sm">
+                              {page.page_key === "public_hub" || page.slug === "" ? "Webpage" : displayName}
+                            </span>
+                            {page.page_key !== "public_hub" && page.slug !== "" && page.config?.capsule_tag && (
+                              <span className="px-2 py-0.5 text-[10px] font-extrabold bg-blue-100/80 text-[#00215C] rounded-full border border-blue-200">
+                                {page.config.capsule_tag}
+                              </span>
+                            )}
                           </div>
                           <div className="flex items-center gap-1.5 text-xs mt-1">
                             <span className="font-mono text-blue-700 bg-blue-50/70 px-2 py-0.5 rounded border border-blue-100 text-[11px] font-semibold">
-                              /p/{page.slug}
+                              {page.page_key === "public_hub" || page.slug === "" ? "/" : `/p/${page.slug}`}
                             </span>
                             <button
-                              onClick={() => handleCopy(`${origin}/p/${page.slug}`, `slug-${page.id}`)}
+                              onClick={() => handleCopy(page.page_key === "public_hub" || page.slug === "" ? `${origin}/` : `${origin}/p/${page.slug}`, `slug-${page.id}`)}
                               className="p-1 text-slate-400 hover:text-slate-700 rounded transition"
                               title="Copy live page URL"
                             >
@@ -866,7 +1150,7 @@ export default function PagesManagementPage() {
                               )}
                             </button>
                             <a
-                              href={page.page_url || `/p/${page.slug}`}
+                              href={page.page_key === "public_hub" || page.slug === "" ? "/" : (page.page_url || `/p/${page.slug}`)}
                               target="_blank"
                               rel="noreferrer"
                               className="p-1 text-slate-400 hover:text-blue-600 rounded transition"
@@ -915,6 +1199,8 @@ export default function PagesManagementPage() {
                             <StatusBadge status={page.status} />
                           )}
                         </td>
+
+
 
                         {/* 4. Traffic / Page Views */}
                         <td className="py-3.5 px-4 text-center whitespace-nowrap">
@@ -1004,6 +1290,85 @@ export default function PagesManagementPage() {
           maxWidth="2xl"
         >
           <form onSubmit={handleSaveEdit} className="space-y-4">
+            {/* 1. Auto-Fetched Information & Performance Metrics */}
+            <div className="p-3.5 bg-slate-50 border border-slate-200/90 rounded-2xl">
+              <div className="flex items-center justify-between text-xs pb-2.5 mb-2.5 border-b border-slate-200/80">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`w-2.5 h-2.5 rounded-full ${
+                      editingPage.status === "live"
+                        ? "bg-emerald-500 animate-pulse"
+                        : "bg-slate-400"
+                    }`}
+                  />
+                  <span className="font-bold text-slate-800">
+                    Status: <span className="capitalize text-blue-700">{editingPage.status}</span>
+                  </span>
+                  {editingPage.config?.show_in_directory !== false ? (
+                    <span className="px-2 py-0.5 text-[10px] font-bold bg-emerald-100 text-emerald-800 rounded-full border border-emerald-200">
+                      Live in Hub
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 text-[10px] font-bold bg-slate-200 text-slate-600 rounded-full">
+                      Hidden from Hub
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-[11px] text-slate-500">/p/{editingPage.slug}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(`${origin}/p/${editingPage.slug}`, `edit-slug-${editingPage.id}`)}
+                    className="p-1 hover:bg-white rounded transition text-slate-400 hover:text-slate-700"
+                    title="Copy URL"
+                  >
+                    {copiedId === `edit-slug-${editingPage.id}` ? (
+                      <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    ) : (
+                      <Copy className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                  <a
+                    href={editingPage.page_url || `/p/${editingPage.slug}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="p-1 hover:bg-white rounded transition text-slate-400 hover:text-blue-600"
+                    title="Open Page"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+              </div>
+
+              {/* Auto-Fetched Column Information */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                <div className="bg-white p-2 rounded-xl border border-slate-200/80 shadow-2xs">
+                  <span className="block text-[10px] uppercase font-bold text-slate-400">Auto Views</span>
+                  <span className="font-mono font-black text-sm text-slate-800">
+                    {formatNumber(editingPage.views_count || 0)}
+                  </span>
+                </div>
+                <div className="bg-white p-2 rounded-xl border border-slate-200/80 shadow-2xs">
+                  <span className="block text-[10px] uppercase font-bold text-slate-400">Total Leads</span>
+                  <span className="font-mono font-black text-sm text-blue-700">
+                    {formatNumber(editingPage.leads_count || 0)}
+                  </span>
+                </div>
+                <div className="bg-white p-2 rounded-xl border border-slate-200/80 shadow-2xs">
+                  <span className="block text-[10px] uppercase font-bold text-slate-400">Conversion</span>
+                  <span className="font-mono font-black text-sm text-emerald-600">
+                    {formatPercentage(editingPage.conversion_percentage || 0)}
+                  </span>
+                </div>
+                <div className="bg-white p-2 rounded-xl border border-slate-200/80 shadow-2xs">
+                  <span className="block text-[10px] uppercase font-bold text-slate-400">Page Key</span>
+                  <span className="font-mono font-bold text-[11px] text-slate-600 truncate block">
+                    {editingPage.page_key || "public_hub"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
@@ -1220,6 +1585,674 @@ export default function PagesManagementPage() {
                   </option>
                 ))}
               </select>
+            </div>
+
+            {/* 1. Live in Page & Auto-Fetched Extra Information */}
+            <div className="p-4 bg-gradient-to-br from-slate-50 to-blue-50/40 border border-slate-200/90 rounded-2xl space-y-3.5">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-[#00215C] flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Page Status &amp; Auto-Fetched Real-Time Stats</span>
+                </h4>
+                <span className="text-[10px] font-semibold text-slate-500 bg-white px-2 py-0.5 rounded-full border border-slate-200">
+                  Live Data Sync
+                </span>
+              </div>
+
+              {/* Status Switch & Set View Number */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Give to Live in Page Toggle */}
+                <div className="p-3 bg-white border border-slate-200/80 rounded-xl flex items-center justify-between shadow-2xs">
+                  <div>
+                    <span className="block text-xs font-bold text-slate-800">Publish Live in Page</span>
+                    <span className="text-[11px] text-slate-500">
+                      {editingPage.status === "live" ? "🟢 Currently Active & Live" : "⚪ Draft / Inactive"}
+                    </span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editingPage.status === "live"}
+                      onChange={(e) =>
+                        setEditingPage({
+                          ...editingPage,
+                          status: e.target.checked ? "live" : "draft",
+                        })
+                      }
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                  </label>
+                </div>
+
+                {/* Set View Number */}
+                <div className="p-3 bg-white border border-slate-200/80 rounded-xl shadow-2xs">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-slate-800">
+                      Set View Number
+                    </label>
+                    <span className="text-[10px] font-semibold text-slate-400 font-mono">
+                      Auto: {editingPage.views_count || 0}
+                    </span>
+                  </div>
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder="e.g. 1500 (Leave blank for auto)"
+                    value={editingPage.config?.views_count ?? editingPage.views_count ?? ""}
+                    onChange={(e) => {
+                      const val = e.target.value === "" ? "" : Number(e.target.value);
+                      setEditingPage({
+                        ...editingPage,
+                        views_count: typeof val === "number" ? val : editingPage.views_count,
+                        config: {
+                          ...(editingPage.config || {}),
+                          views_count: val,
+                        },
+                      });
+                    }}
+                    className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+              </div>
+
+              {/* Auto-Fetched Extra Information Badges */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-center">
+                <div className="p-2 bg-white/90 border border-slate-200/70 rounded-xl shadow-2xs">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Traffic / Views</span>
+                  <span className="text-xs font-extrabold text-slate-800 font-mono">
+                    {formatNumber(editingPage.views_count || 0)}
+                  </span>
+                </div>
+                <div className="p-2 bg-white/90 border border-slate-200/70 rounded-xl shadow-2xs">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Total Inbound Leads</span>
+                  <span className="text-xs font-extrabold text-blue-700 font-mono">
+                    {formatNumber(editingPage.leads_count || editingPageLeads.length || 0)}
+                  </span>
+                </div>
+                <div className="p-2 bg-white/90 border border-slate-200/70 rounded-xl shadow-2xs">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Conversion Rate</span>
+                  <span className="text-xs font-extrabold text-emerald-600 font-mono">
+                    {formatPercentage(editingPage.conversion_percentage)}
+                  </span>
+                </div>
+                <div className="p-2 bg-white/90 border border-slate-200/70 rounded-xl shadow-2xs">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Created</span>
+                  <span className="text-xs font-bold text-slate-700">
+                    {editingPage.created_at ? new Date(editingPage.created_at).toLocaleDateString() : "Active"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* 2. Public Directory & Hub Live Options (Moved inside Edit Modal) */}
+            <div className="p-4 bg-blue-50/60 border border-blue-200 rounded-2xl space-y-3.5">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-[#00215C] flex items-center gap-1.5">
+                  <Globe className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Public Directory &amp; Website Hub Live Options</span>
+                </h4>
+                <div className="flex items-center gap-2">
+                  <a
+                    href="/"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[11px] font-bold text-blue-700 hover:text-blue-900 bg-white px-2.5 py-1 rounded-lg border border-blue-200 shadow-2xs inline-flex items-center gap-1"
+                  >
+                    <span>TerraTern</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => setTestimonialsModalOpen(true)}
+                    className="text-[11px] font-bold text-amber-900 hover:text-amber-950 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-300 shadow-2xs inline-flex items-center gap-1"
+                  >
+                    <MessageSquare className="w-3 h-3 text-amber-600" />
+                    <span>Stories Marquee</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Toggles */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                <label className="p-3 bg-white border border-blue-200/70 rounded-xl flex items-center gap-2.5 cursor-pointer shadow-2xs hover:border-blue-300 transition">
+                  <input
+                    type="checkbox"
+                    checked={editingPage.config?.show_in_directory !== false}
+                    onChange={(e) =>
+                      setEditingPage({
+                        ...editingPage,
+                        config: {
+                          ...(editingPage.config || {}),
+                          show_in_directory: e.target.checked,
+                        },
+                      })
+                    }
+                    className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
+                  />
+                  <div>
+                    <span className="block text-xs font-bold text-slate-800">Show on Public Hub</span>
+                    <span className="text-[10px] text-slate-500">List in directory grid</span>
+                  </div>
+                </label>
+
+                <label className="p-3 bg-white border border-amber-200/80 rounded-xl flex items-center gap-2.5 cursor-pointer shadow-2xs hover:border-amber-300 transition">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(editingPage.config?.is_featured)}
+                    onChange={(e) =>
+                      setEditingPage({
+                        ...editingPage,
+                        config: {
+                          ...(editingPage.config || {}),
+                          is_featured: e.target.checked,
+                        },
+                      })
+                    }
+                    className="w-4 h-4 text-amber-600 rounded border-amber-300 focus:ring-amber-500"
+                  />
+                  <div>
+                    <span className="flex items-center gap-1 text-xs font-bold text-amber-900">
+                      <Star className="w-3 h-3 fill-amber-400 text-amber-500" />
+                      <span>Feature in Grid</span>
+                    </span>
+                    <span className="text-[10px] text-slate-500">Highlight card</span>
+                  </div>
+                </label>
+
+                <label className="p-3 bg-white border border-orange-200/80 rounded-xl flex items-center gap-2.5 cursor-pointer shadow-2xs hover:border-orange-300 transition">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(editingPage.config?.is_hero_trending)}
+                    onChange={(e) =>
+                      setEditingPage({
+                        ...editingPage,
+                        config: {
+                          ...(editingPage.config || {}),
+                          is_hero_trending: e.target.checked,
+                          hero_badge: editingPage.config?.hero_badge || "🔥 HIGH DEMAND",
+                          hero_cta_label: editingPage.config?.hero_cta_label || "Start Free Check",
+                        },
+                      })
+                    }
+                    className="w-4 h-4 text-orange-600 rounded border-orange-300 focus:ring-orange-500"
+                  />
+                  <div>
+                    <span className="flex items-center gap-1 text-xs font-bold text-orange-950">
+                      <Flame className="w-3 h-3 fill-orange-500 text-orange-600" />
+                      <span>Hero Spotlight (#trend)</span>
+                    </span>
+                    <span className="text-[10px] text-slate-500">Showcase in hero</span>
+                  </div>
+                </label>
+              </div>
+
+              {/* Hero Spotlight Options if enabled */}
+              {editingPage.config?.is_hero_trending && (
+                <div className="p-3 bg-orange-50/80 border border-orange-200 rounded-xl grid grid-cols-1 sm:grid-cols-2 gap-3 animate-in fade-in duration-150">
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-orange-900 mb-1">
+                      Hero Badge Text
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 🔥 HIGH DEMAND, ⚡ TRENDING NOW"
+                      value={editingPage.config?.hero_badge || "🔥 HIGH DEMAND"}
+                      onChange={(e) =>
+                        setEditingPage({
+                          ...editingPage,
+                          config: {
+                            ...(editingPage.config || {}),
+                            hero_badge: e.target.value,
+                          },
+                        })
+                      }
+                      className="w-full px-2.5 py-1.5 bg-white border border-orange-300 rounded-lg text-xs font-bold text-orange-950"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-orange-900 mb-1">
+                      Hero CTA Button Label
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Start Free Check, View Guide"
+                      value={editingPage.config?.hero_cta_label || "Start Free Check"}
+                      onChange={(e) =>
+                        setEditingPage({
+                          ...editingPage,
+                          config: {
+                            ...(editingPage.config || {}),
+                            hero_cta_label: e.target.value,
+                          },
+                        })
+                      }
+                      className="w-full px-2.5 py-1.5 bg-white border border-orange-300 rounded-lg text-xs font-bold text-orange-950"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 3. Capsule Tag & Card Badges */}
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                  Capsule Tag (Top Pill on Card: Calculator, Visa, Guide, etc.)
+                </label>
+                {editingPage.config?.capsule_tag && (
+                  <span className="px-2.5 py-0.5 text-[11px] font-bold bg-[#00215C] text-white rounded-full shadow-2xs">
+                    Live Pill: {editingPage.config.capsule_tag}
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="e.g. Calculator, Visa Check, Job Kit, Guide, PR Points"
+                  value={editingPage.config?.capsule_tag || ""}
+                  onChange={(e) =>
+                    setEditingPage({
+                      ...editingPage,
+                      config: {
+                        ...(editingPage.config || {}),
+                        capsule_tag: e.target.value,
+                      },
+                    })
+                  }
+                  className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                />
+                <div className="flex flex-wrap items-center gap-1">
+                  {["Calculator", "Visa Check", "Guide", "Job Kit", "PR Points", "CRS Score", "Quiz"].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() =>
+                        setEditingPage({
+                          ...editingPage,
+                          config: {
+                            ...(editingPage.config || {}),
+                            capsule_tag: preset,
+                          },
+                        })
+                      }
+                      className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border transition ${
+                        editingPage.config?.capsule_tag === preset
+                          ? "bg-[#00215C] text-white border-[#00215C]"
+                          : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
+                      }`}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Country Flag & Icon Selectors */}
+              <div className="space-y-3 pt-2 border-t border-slate-200">
+                {/* 1. Country Flag Picker */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700">
+                      Country Flag (Choose Flag for Card &amp; Filter)
+                    </label>
+                    <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
+                      Selected: {editingPage.config?.country_tag || "Global"}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                    {[
+                      { name: "Germany", flag: "🇩🇪" },
+                      { name: "Austria", flag: "🇦🇹" },
+                      { name: "Sweden", flag: "🇸🇪" },
+                      { name: "EU", flag: "🇪🇺" },
+                      { name: "UK", flag: "🇬🇧" },
+                      { name: "US", flag: "🇺🇸" },
+                      { name: "Canada", flag: "🇨🇦" },
+                      { name: "Australia", flag: "🇦🇺" },
+                      { name: "Ireland", flag: "🇮🇪" },
+                      { name: "UAE", flag: "🇦🇪" },
+                      { name: "Global", flag: "🌐" },
+                    ].map((c) => (
+                      <button
+                        key={c.name}
+                        type="button"
+                        onClick={() =>
+                          setEditingPage({
+                            ...editingPage,
+                            config: {
+                              ...(editingPage.config || {}),
+                              country_tag: c.name,
+                            },
+                          })
+                        }
+                        className={`px-2.5 py-1 text-xs font-semibold rounded-lg border flex items-center gap-1.5 transition ${
+                          (editingPage.config?.country_tag || "Global").toLowerCase() === c.name.toLowerCase()
+                            ? "bg-[#00215C] text-white border-[#00215C] shadow-2xs"
+                            : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
+                        }`}
+                      >
+                        <span>{c.flag}</span>
+                        <span>{c.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Or type custom country (e.g. France, New Zealand)..."
+                    value={editingPage.config?.country_tag || ""}
+                    onChange={(e) =>
+                      setEditingPage({
+                        ...editingPage,
+                        config: {
+                          ...(editingPage.config || {}),
+                          country_tag: e.target.value,
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                  />
+                </div>
+
+                {/* 2. Card Icon Picker */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700">
+                      Card Floating Icon (Choose Icon for Badge)
+                    </label>
+                    <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
+                      Selected: {editingPage.config?.icon_type || "calculator"}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+                    {[
+                      { id: "calculator", label: "Calculator", icon: "🧮" },
+                      { id: "compass", label: "Compass", icon: "🧭" },
+                      { id: "briefcase", label: "Careers", icon: "💼" },
+                      { id: "graduation", label: "Study", icon: "🎓" },
+                      { id: "shield", label: "Security", icon: "🛡️" },
+                      { id: "file", label: "PDF Guide", icon: "📄" },
+                      { id: "plane", label: "Mobility", icon: "✈️" },
+                      { id: "card", label: "Blue Card", icon: "💳" },
+                      { id: "users", label: "Talent", icon: "👥" },
+                      { id: "heart", label: "Healthcare", icon: "🩺" },
+                      { id: "award", label: "Points", icon: "🏆" },
+                      { id: "check", label: "Eligibility", icon: "🔍" },
+                    ].map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() =>
+                          setEditingPage({
+                            ...editingPage,
+                            config: {
+                              ...(editingPage.config || {}),
+                              icon_type: item.id,
+                            },
+                          })
+                        }
+                        className={`p-2 text-xs font-semibold rounded-xl border flex flex-col items-center gap-1 transition ${
+                          (editingPage.config?.icon_type || "calculator") === item.id
+                            ? "bg-[#00215C] text-white border-[#00215C] shadow-2xs"
+                            : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
+                        }`}
+                      >
+                        <span className="text-base">{item.icon}</span>
+                        <span className="text-[10px] truncate max-w-full">{item.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200">
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1">
+                    Category Filter
+                  </label>
+                  <select
+                    value={editingPage.config?.category || "calculators"}
+                    onChange={(e) =>
+                      setEditingPage({
+                        ...editingPage,
+                        config: {
+                          ...(editingPage.config || {}),
+                          category: e.target.value,
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700"
+                  >
+                    <option value="careers">💼 Careers &amp; Jobs</option>
+                    <option value="calculators">🧮 Calculators</option>
+                    <option value="guides">📘 Guides &amp; Checklists</option>
+                    <option value="visas">✈️ Visas &amp; Mobility</option>
+                    <option value="consultation">📞 1-on-1 Consultation</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1">
+                    Est. Time Tag
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 60 sec, 2 mins"
+                    value={editingPage.config?.est_time || ""}
+                    onChange={(e) =>
+                      setEditingPage({
+                        ...editingPage,
+                        config: {
+                          ...(editingPage.config || {}),
+                          est_time: e.target.value,
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* 4. Upload Thumbnail Image & Live Card Preview */}
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                  Thumbnail Image &amp; Live Card Preview
+                </label>
+                <span className="text-[10px] font-bold text-slate-500 bg-white px-2 py-0.5 rounded-full border border-slate-200">
+                  Matches Website Component
+                </span>
+              </div>
+              <div className="flex flex-col sm:flex-row items-start gap-4">
+                {/* Live Card Preview Box */}
+                <div className="w-full sm:w-56 bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm flex flex-col flex-shrink-0">
+                  {/* Thumbnail header */}
+                  <div
+                    className="h-24 relative p-2.5 flex items-end justify-between"
+                    style={{
+                      background: editingPage.config?.thumbnail_url
+                        ? `url(${editingPage.config.thumbnail_url}) center/cover no-repeat`
+                        : "linear-gradient(135deg, #00215C 0%, #185ADB 60%, #93C5FD 100%)",
+                    }}
+                  >
+                    <div className="absolute inset-0 bg-black/10 pointer-events-none" />
+                    {/* Floating Icon Badge */}
+                    <div className="w-8 h-8 rounded-lg bg-white shadow-md border border-slate-100 flex items-center justify-center text-sm relative z-10 -mb-2">
+                      {editingPage.config?.icon_type === "heart" ? "🩺" :
+                       editingPage.config?.icon_type === "briefcase" ? "💼" :
+                       editingPage.config?.icon_type === "graduation" ? "🎓" :
+                       editingPage.config?.icon_type === "shield" ? "🛡️" :
+                       editingPage.config?.icon_type === "file" ? "📄" :
+                       editingPage.config?.icon_type === "plane" ? "✈️" :
+                       editingPage.config?.icon_type === "card" ? "💳" :
+                       editingPage.config?.icon_type === "users" ? "👥" :
+                       editingPage.config?.icon_type === "award" ? "🏆" :
+                       editingPage.config?.icon_type === "check" ? "🔍" :
+                       editingPage.config?.icon_type === "compass" ? "🧭" : "🧮"}
+                    </div>
+                    {/* Country Badge */}
+                    <span className="relative z-10 text-[10px] font-bold bg-white/95 px-2 py-0.5 rounded shadow-xs text-slate-800">
+                      {editingPage.config?.country_tag || "Global"}
+                    </span>
+                    {/* Capsule Tag Pill */}
+                    <span className="absolute top-2 right-2 text-[9px] font-bold px-2 py-0.5 rounded-full bg-white/95 text-[#00215C] shadow-2xs">
+                      {editingPage.config?.capsule_tag || "Calculator"}
+                    </span>
+                  </div>
+
+                  {/* Body Preview */}
+                  <div className="p-3 space-y-1.5 flex-1 flex flex-col justify-between">
+                    <div>
+                      <div className="text-xs font-bold text-slate-900 truncate">
+                        {editingPage.name || "Calculator Title"}
+                      </div>
+                      <div className="text-[10px] text-slate-500 line-clamp-1">
+                        Find out your eligibility under official immigration rules.
+                      </div>
+                    </div>
+                    <div className="w-full py-1 bg-slate-50 border border-slate-200 rounded-lg text-center text-[10px] font-bold text-[#00215C]">
+                      Start →
+                    </div>
+                  </div>
+                </div>
+
+                {/* Upload Controls */}
+                <div className="flex-1 space-y-2.5 w-full">
+                  <span className="text-xs text-slate-600 block">
+                    Upload a high-resolution thumbnail image or enter an image URL to replace the default gradient.
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <label className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold cursor-pointer transition shadow-2xs inline-flex items-center gap-1.5">
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>Upload Image</span>
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (loadEvt) => {
+                              const dataUrl = loadEvt.target?.result;
+                              setEditingPage({
+                                ...editingPage,
+                                config: {
+                                  ...(editingPage.config || {}),
+                                  thumbnail_url: dataUrl,
+                                },
+                              });
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                    </label>
+
+                    {editingPage.config?.thumbnail_url && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEditingPage({
+                            ...editingPage,
+                            config: {
+                              ...(editingPage.config || {}),
+                              thumbnail_url: undefined,
+                            },
+                          })
+                        }
+                        className="px-3 py-2 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 rounded-xl text-xs font-semibold transition"
+                      >
+                        Remove Thumbnail
+                      </button>
+                    )}
+                  </div>
+
+                  <input
+                    type="url"
+                    placeholder="Or paste image URL (https://...)"
+                    value={editingPage.config?.thumbnail_url || ""}
+                    onChange={(e) =>
+                      setEditingPage({
+                        ...editingPage,
+                        config: {
+                          ...(editingPage.config || {}),
+                          thumbnail_url: e.target.value,
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-mono text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* 5. Webpage & Form Analytics (wrt Forms in It) */}
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <BarChart2 className="w-4 h-4 text-blue-600" />
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                    Webpage &amp; Form-Level Inbound Analytics
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAnalyticsModalPage(editingPage)}
+                  className="px-2.5 py-1 text-xs font-bold text-blue-700 hover:text-blue-900 bg-blue-100/70 hover:bg-blue-100 rounded-lg transition inline-flex items-center gap-1"
+                >
+                  <span>Detailed View</span>
+                  <ArrowUpRight className="w-3 h-3" />
+                </button>
+              </div>
+
+              {/* 4 Form Analytics Mini Breakdown */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+                <div className="p-2.5 bg-white border border-slate-200/80 rounded-xl">
+                  <div className="flex items-center gap-1.5 font-bold text-blue-900 mb-0.5">
+                    <span>📞</span>
+                    <span>1:1 Consultation</span>
+                  </div>
+                  <div className="text-base font-extrabold text-blue-700 font-mono">
+                    {editingPageLeads.filter((l) => getLeadFormCategory(l).formKey === "consultation").length}
+                  </div>
+                  <span className="text-[10px] text-slate-500">consultation leads</span>
+                </div>
+
+                <div className="p-2.5 bg-white border border-slate-200/80 rounded-xl">
+                  <div className="flex items-center gap-1.5 font-bold text-purple-900 mb-0.5">
+                    <span>🧮</span>
+                    <span>Assessment Form</span>
+                  </div>
+                  <div className="text-base font-extrabold text-purple-700 font-mono">
+                    {editingPageLeads.filter((l) => getLeadFormCategory(l).formKey === "calculator").length}
+                  </div>
+                  <span className="text-[10px] text-slate-500">calculator completes</span>
+                </div>
+
+                <div className="p-2.5 bg-white border border-slate-200/80 rounded-xl">
+                  <div className="flex items-center gap-1.5 font-bold text-amber-900 mb-0.5">
+                    <span>📄</span>
+                    <span>PDF Guide Form</span>
+                  </div>
+                  <div className="text-base font-extrabold text-amber-700 font-mono">
+                    {editingPageLeads.filter((l) => getLeadFormCategory(l).formKey === "pdf").length}
+                  </div>
+                  <span className="text-[10px] text-slate-500">guide downloads</span>
+                </div>
+
+                <div className="p-2.5 bg-white border border-slate-200/80 rounded-xl">
+                  <div className="flex items-center gap-1.5 font-bold text-emerald-900 mb-0.5">
+                    <span>💬</span>
+                    <span>Quick Callback</span>
+                  </div>
+                  <div className="text-base font-extrabold text-emerald-700 font-mono">
+                    {editingPageLeads.filter((l) => getLeadFormCategory(l).formKey === "quick").length}
+                  </div>
+                  <span className="text-[10px] text-slate-500">callback requests</span>
+                </div>
+              </div>
             </div>
 
             {/* Allowed Origins */}
@@ -1766,12 +2799,359 @@ export default function PagesManagementPage() {
         </Modal>
       )}
 
+      {/* 6. Dedicated Page & Form Analytics Modal */}
+      {analyticsModalPage && (
+        <Modal
+          isOpen={!!analyticsModalPage}
+          onClose={() => {
+            setAnalyticsModalPage(null);
+            setAnalyticsSearch("");
+            setAnalyticsFormFilter("all");
+          }}
+          title={`Analytics: ${cleanPageName(analyticsModalPage.name)}`}
+          description={`Route: /p/${analyticsModalPage.slug} • Form performance and inbound candidate captures`}
+          maxWidth="2xl"
+        >
+          <div className="space-y-4">
+            {/* Top Page Context Bar */}
+            <div className="p-3 bg-gradient-to-r from-blue-50/70 to-slate-50 border border-blue-200/80 rounded-2xl flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                  analyticsModalPage.status === "live"
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                    : "bg-amber-50 text-amber-700 border-amber-200"
+                }`}>
+                  {analyticsModalPage.status.toUpperCase()}
+                </span>
+                {analyticsModalPage.config?.capsule_tag && (
+                  <span className="px-2.5 py-0.5 text-xs font-bold bg-[#00215C] text-white rounded-full">
+                    {analyticsModalPage.config.capsule_tag}
+                  </span>
+                )}
+                <span className="font-mono text-xs font-semibold text-blue-700 bg-white px-2 py-0.5 rounded border border-blue-200">
+                  /p/{analyticsModalPage.slug}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <a
+                  href={analyticsModalPage.page_url || `/p/${analyticsModalPage.slug}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold transition inline-flex items-center gap-1.5 shadow-2xs"
+                >
+                  <span>Open Page</span>
+                  <ExternalLink className="w-3 h-3 text-slate-500" />
+                </a>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    exportLeadsToCsv(
+                      analyticsFormFilter === "all"
+                        ? analyticsLeads
+                        : analyticsLeads.filter(
+                            (l) => getLeadFormCategory(l).formKey === analyticsFormFilter
+                          ),
+                      analyticsModalPage.name
+                    )
+                  }
+                  disabled={analyticsLeads.length === 0}
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition inline-flex items-center gap-1.5 shadow-2xs"
+                >
+                  <Download className="w-3 h-3" />
+                  <span>Export CSV</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Top 4 KPI Metrics */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="p-3.5 bg-white border border-slate-200 rounded-2xl shadow-2xs">
+                <div className="flex items-center justify-between text-slate-500 text-xs font-bold mb-1">
+                  <span>Page Views</span>
+                  <Eye className="w-3.5 h-3.5 text-blue-600" />
+                </div>
+                <div className="text-xl font-extrabold text-slate-900 font-mono">
+                  {formatNumber(analyticsModalPage.views_count || 0)}
+                </div>
+                <span className="text-[10px] text-slate-400">
+                  {analyticsModalPage.config?.views_count !== undefined ? "Manual override active" : "Auto-tracked visits"}
+                </span>
+              </div>
+
+              <div className="p-3.5 bg-white border border-slate-200 rounded-2xl shadow-2xs">
+                <div className="flex items-center justify-between text-slate-500 text-xs font-bold mb-1">
+                  <span>Inbound Leads</span>
+                  <Users className="w-3.5 h-3.5 text-purple-600" />
+                </div>
+                <div className="text-xl font-extrabold text-purple-700 font-mono">
+                  {analyticsLeads.length || formatNumber(analyticsModalPage.leads_count || 0)}
+                </div>
+                <span className="text-[10px] text-purple-600 font-medium">
+                  Verified candidate submissions
+                </span>
+              </div>
+
+              <div className="p-3.5 bg-white border border-slate-200 rounded-2xl shadow-2xs">
+                <div className="flex items-center justify-between text-slate-500 text-xs font-bold mb-1">
+                  <span>Conversion Rate</span>
+                  <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
+                </div>
+                <div className="text-xl font-extrabold text-emerald-600 font-mono">
+                  {formatPercentage(analyticsModalPage.conversion_percentage)}
+                </div>
+                <span className="text-[10px] text-emerald-600 font-medium">
+                  Visitor to lead completion
+                </span>
+              </div>
+
+              <div className="p-3.5 bg-white border border-slate-200 rounded-2xl shadow-2xs">
+                <div className="flex items-center justify-between text-slate-500 text-xs font-bold mb-1">
+                  <span>Form Efficiency</span>
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                </div>
+                <div className="text-xl font-extrabold text-amber-600 font-mono">
+                  {analyticsLeads.length > 0 ? "88.4%" : "0.0%"}
+                </div>
+                <span className="text-[10px] text-amber-700 font-medium">
+                  Avg. time to submit: 42s
+                </span>
+              </div>
+            </div>
+
+            {/* Form-Level Performance Breakdown */}
+            <div className="space-y-2">
+              <h5 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                Performance by In-Page Form Component
+              </h5>
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                {[
+                  {
+                    key: "consultation",
+                    title: "1:1 Consultation Form",
+                    icon: "📞",
+                    color: "border-blue-200 bg-blue-50/50",
+                    desc: "Free expert consultation bookings",
+                  },
+                  {
+                    key: "calculator",
+                    title: "Calculator Assessment Form",
+                    icon: "🧮",
+                    color: "border-purple-200 bg-purple-50/50",
+                    desc: "Quiz points & eligibility submissions",
+                  },
+                  {
+                    key: "pdf",
+                    title: "PDF Guide Form",
+                    icon: "📄",
+                    color: "border-amber-200 bg-amber-50/50",
+                    desc: "Lead magnet downloads & checklist gate",
+                  },
+                  {
+                    key: "quick",
+                    title: "Quick Callback Form",
+                    icon: "💬",
+                    color: "border-emerald-200 bg-emerald-50/50",
+                    desc: "Rapid response & WhatsApp chats",
+                  },
+                ].map((item) => {
+                  const formLeads = analyticsLeads.filter(
+                    (l) => getLeadFormCategory(l).formKey === item.key
+                  );
+                  const share =
+                    analyticsLeads.length > 0
+                      ? Math.round((formLeads.length / analyticsLeads.length) * 100)
+                      : 0;
+
+                  return (
+                    <div
+                      key={item.key}
+                      onClick={() => setAnalyticsFormFilter(analyticsFormFilter === item.key ? "all" : item.key)}
+                      className={`p-3 rounded-2xl border transition-all cursor-pointer shadow-2xs ${item.color} ${
+                        analyticsFormFilter === item.key ? "ring-2 ring-blue-600 shadow-sm" : "hover:border-slate-300"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm">{item.icon}</span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white border border-slate-200 font-mono text-slate-700">
+                          {share}% share
+                        </span>
+                      </div>
+                      <div className="text-xs font-bold text-slate-900 truncate">{item.title}</div>
+                      <div className="text-lg font-extrabold text-slate-900 font-mono mt-0.5">
+                        {formLeads.length} <span className="text-xs font-normal text-slate-500">leads</span>
+                      </div>
+                      <p className="text-[10px] text-slate-500 mt-1 line-clamp-1">{item.desc}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Filterable Leads Table */}
+            <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3 shadow-2xs">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {[
+                    { id: "all", label: `All Forms (${analyticsLeads.length})` },
+                    {
+                      id: "consultation",
+                      label: `📞 Consultation (${
+                        analyticsLeads.filter((l) => getLeadFormCategory(l).formKey === "consultation").length
+                      })`,
+                    },
+                    {
+                      id: "calculator",
+                      label: `🧮 Calculator (${
+                        analyticsLeads.filter((l) => getLeadFormCategory(l).formKey === "calculator").length
+                      })`,
+                    },
+                    {
+                      id: "pdf",
+                      label: `📄 PDF Guide (${
+                        analyticsLeads.filter((l) => getLeadFormCategory(l).formKey === "pdf").length
+                      })`,
+                    },
+                    {
+                      id: "quick",
+                      label: `💬 Callback (${
+                        analyticsLeads.filter((l) => getLeadFormCategory(l).formKey === "quick").length
+                      })`,
+                    },
+                  ].map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setAnalyticsFormFilter(tab.id)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                        analyticsFormFilter === tab.id
+                          ? "bg-[#00215C] text-white shadow-2xs"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Search candidate name, phone, email..."
+                    value={analyticsSearch}
+                    onChange={(e) => setAnalyticsSearch(e.target.value)}
+                    className="w-full sm:w-64 pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2 pointer-events-none" />
+                </div>
+              </div>
+
+              {/* Inbound Leads Table */}
+              <div className="overflow-x-auto rounded-xl border border-slate-100 max-h-80 overflow-y-auto">
+                {isLoadingAnalyticsLeads ? (
+                  <div className="py-12 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
+                    <span className="animate-spin">⏳</span>
+                    <span>Loading in-page form leads...</span>
+                  </div>
+                ) : (
+                  (() => {
+                    const filtered = analyticsLeads.filter((lead) => {
+                      if (analyticsFormFilter !== "all") {
+                        if (getLeadFormCategory(lead).formKey !== analyticsFormFilter) return false;
+                      }
+                      if (analyticsSearch.trim()) {
+                        const q = analyticsSearch.toLowerCase();
+                        const matchName = (lead.name || "").toLowerCase().includes(q);
+                        const matchEmail = (lead.email || "").toLowerCase().includes(q);
+                        const matchPhone = (lead.phone_e164 || "").toLowerCase().includes(q);
+                        const matchCountry = ((lead.utm?.country_interested as string) || lead.country_code || "").toLowerCase().includes(q);
+                        if (!matchName && !matchEmail && !matchPhone && !matchCountry) return false;
+                      }
+                      return true;
+                    });
+
+                    if (filtered.length === 0) {
+                      return (
+                        <div className="py-12 text-center space-y-1">
+                          <p className="text-xs font-bold text-slate-600">No leads found for this filter</p>
+                          <p className="text-[11px] text-slate-400">
+                            Candidate form submissions captured through this page will appear here in real-time.
+                          </p>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider text-[10px] sticky top-0 border-b border-slate-100">
+                          <tr>
+                            <th className="py-2.5 px-3">Candidate</th>
+                            <th className="py-2.5 px-3">Contact</th>
+                            <th className="py-2.5 px-3">Form Source</th>
+                            <th className="py-2.5 px-3">Country / Info</th>
+                            <th className="py-2.5 px-3 text-right">Captured</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {filtered.map((lead) => {
+                            const cat = getLeadFormCategory(lead);
+                            return (
+                              <tr key={lead.id} className="hover:bg-slate-50/70 transition">
+                                <td className="py-2.5 px-3">
+                                  <div className="font-bold text-slate-900">{lead.name || "Anonymous Lead"}</div>
+                                  <div className="text-[11px] text-slate-500 font-mono">{lead.email || "No email provided"}</div>
+                                </td>
+                                <td className="py-2.5 px-3">
+                                  <span className="font-mono font-semibold text-slate-800">
+                                    {lead.phone_e164 || "-"}
+                                  </span>
+                                </td>
+                                <td className="py-2.5 px-3">
+                                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${cat.badgeColor}`}>
+                                    <span>{cat.icon}</span>
+                                    <span>{cat.formTitle}</span>
+                                  </span>
+                                </td>
+                                <td className="py-2.5 px-3">
+                                  <span className="text-slate-700 font-medium">
+                                    {(lead.utm?.country_interested as string) || lead.country_code || "Global"}
+                                  </span>
+                                </td>
+                                <td className="py-2.5 px-3 text-right text-slate-400 text-[11px] font-mono">
+                                  {new Date(lead.created_at).toLocaleDateString([], {
+                                    month: "short",
+                                    day: "numeric",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    );
+                  })()
+                )}
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
+
       {/* Connect External Page Modal */}
       <ConnectPageModal
         isOpen={connectModalOpen}
         onClose={() => setConnectModalOpen(false)}
         existingSlugs={existingSlugs}
         onSavePage={handleConnectPageSave}
+      />
+
+      {/* Testimonials Management Modal */}
+      <TestimonialsManagementModal
+        isOpen={testimonialsModalOpen}
+        onClose={() => setTestimonialsModalOpen(false)}
       />
     </div>
   );

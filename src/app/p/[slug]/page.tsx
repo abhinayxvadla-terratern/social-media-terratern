@@ -65,6 +65,13 @@ export default function NativePublicLandingPage({ params }: DynamicPageProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitResult, setSubmitResult] = useState<any>(null);
 
+  // Set page document title strictly to TerraTern
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      document.title = 'TerraTern';
+    }
+  }, []);
+
   // Parse URL query params and load page details
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -320,6 +327,13 @@ export default function NativePublicLandingPage({ params }: DynamicPageProps) {
       <script src="${scriptSrc}" data-page-key="${page.page_key}" async></script>
     `;
 
+    // Ensure HTML document title is always TerraTern
+    if (finalHtml.includes('<title>')) {
+      finalHtml = finalHtml.replace(/<title>[\s\S]*?<\/title>/i, '<title>TerraTern</title>');
+    } else if (finalHtml.includes('<head>')) {
+      finalHtml = finalHtml.replace('<head>', '<head><title>TerraTern</title>');
+    }
+
     // Inject base href so relative assets, styles, scripts and API requests resolve accurately
     if (originUrl) {
       if (finalHtml.includes('<head>')) {
@@ -341,7 +355,7 @@ export default function NativePublicLandingPage({ params }: DynamicPageProps) {
       <div className="w-full min-h-screen bg-slate-50 flex flex-col">
         <iframe
           srcDoc={finalHtml}
-          title={page.name || "Assessment"}
+          title="TerraTern"
           className="w-full min-h-screen flex-1 border-0"
           sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-downloads"
         />

@@ -68,11 +68,101 @@ export default function LeadsManagementPage() {
   // Filters
   const [search, setSearch] = useState("");
   const [selectedPageId, setSelectedPageId] = useState<string>("all");
+  const [selectedFormType, setSelectedFormType] = useState<string>("all");
   const [selectedDateRange, setSelectedDateRange] = useState<string>("all");
   const [selectedSource, setSelectedSource] = useState<string>("all");
   const [selectedKeyword, setSelectedKeyword] = useState<string>("all");
   const [selectedCompleteness, setSelectedCompleteness] = useState<string>("all");
   const [selectedDuplication, setSelectedDuplication] = useState<string>("all");
+
+  // Helper to categorize and tag lead forms
+  const getLeadFormTag = (lead: Lead) => {
+    const formType = (lead.utm?.form_type || "").toLowerCase();
+    const formTitle = lead.utm?.form_title || (lead as any).calculator_name;
+    const source = (lead.source || "").toLowerCase();
+    const isHub =
+      lead.page_id === "page_frontend_hub" ||
+      lead.page_id === "public_hub" ||
+      lead.page?.slug === "" ||
+      lead.page?.slug === "public-hub" ||
+      lead.utm?.page_origin === "frontend_hub" ||
+      source === "website_hub";
+
+    if (formTitle) {
+      if (formTitle.toLowerCase().includes("counselling")) {
+        return {
+          formKey: "counselling",
+          title: "1:1 Free Counselling",
+          icon: "📞",
+          badgeColor: "bg-blue-50 text-blue-700 border-blue-200",
+        };
+      }
+      if (formTitle.toLowerCase().includes("strategy")) {
+        return {
+          formKey: "strategy_call",
+          title: "Strategy Call",
+          icon: "📞",
+          badgeColor: "bg-sky-50 text-sky-700 border-sky-200",
+        };
+      }
+      if (formTitle.toLowerCase().includes("consultation")) {
+        return {
+          formKey: "consultation",
+          title: "1:1 Consultation",
+          icon: "📞",
+          badgeColor: "bg-indigo-50 text-indigo-700 border-indigo-200",
+        };
+      }
+    }
+
+    if (formType.includes("counselling")) {
+      return {
+        formKey: "counselling",
+        title: "1:1 Free Counselling",
+        icon: "📞",
+        badgeColor: "bg-blue-50 text-blue-700 border-blue-200",
+      };
+    }
+
+    if (formType.includes("consult") || isHub) {
+      return {
+        formKey: "consultation",
+        title: formTitle || "1:1 Consultation",
+        icon: "📞",
+        badgeColor: "bg-indigo-50 text-indigo-700 border-indigo-200",
+      };
+    }
+
+    if (
+      lead.quiz_score !== null ||
+      lead.quiz_result !== null ||
+      formType.includes("calc") ||
+      formType.includes("assessment")
+    ) {
+      return {
+        formKey: "calculator",
+        title: formTitle || lead.quiz_result || "Calculator Assessment",
+        icon: "🧮",
+        badgeColor: "bg-purple-50 text-purple-700 border-purple-200",
+      };
+    }
+
+    if (formType.includes("pdf") || source.includes("pdf") || source.includes("download")) {
+      return {
+        formKey: "pdf",
+        title: "PDF Guide Download",
+        icon: "📄",
+        badgeColor: "bg-amber-50 text-amber-700 border-amber-200",
+      };
+    }
+
+    return {
+      formKey: "callback",
+      title: "Quick Callback",
+      icon: "💬",
+      badgeColor: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    };
+  };
 
   // Lead Timeline Modal
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
@@ -95,10 +185,10 @@ export default function LeadsManagementPage() {
         .select("id, name, slug")
         .order("name", { ascending: true });
 
-      if (pagesData) {
-        setPages(pagesData as Page[]);
-        setCachedData("admin_pages_brief", pagesData);
-      }
+      const hubPageBrief = { id: "page_frontend_hub", name: "Webpage (/)", slug: "" } as Page;
+      const allPagesBrief = [hubPageBrief, ...(pagesData as Page[] || [])];
+      setPages(allPagesBrief);
+      setCachedData("admin_pages_brief", allPagesBrief);
 
       // Fetch leads with page relationship
       const { data: leadsData, error: leadsError } = await supabase
@@ -278,9 +368,28 @@ export default function LeadsManagementPage() {
         leadSource.toLowerCase().includes(searchLower) ||
         leadKeyword.toLowerCase().includes(searchLower);
 
-      // Page
+      // Page & Frontend Hub match
+      const isHubLead =
+        lead.page_id === "page_frontend_hub" ||
+        lead.page_id === "public_hub" ||
+        lead.page?.slug === "" ||
+        lead.page?.slug === "public-hub" ||
+        lead.utm?.page_origin === "frontend_hub" ||
+        (lead.source || "").toLowerCase() === "website_hub";
+
       const matchesPage =
-        selectedPageId === "all" ? true : lead.page_id === selectedPageId;
+        selectedPageId === "all"
+          ? true
+          : selectedPageId === "page_frontend_hub"
+          ? isHubLead
+          : lead.page_id === selectedPageId;
+
+      // Form Type filter
+      const formTag = getLeadFormTag(lead);
+      const matchesForm =
+        selectedFormType === "all"
+          ? true
+          : formTag.formKey === selectedFormType;
 
       // Source
       const matchesSource =
@@ -328,6 +437,7 @@ export default function LeadsManagementPage() {
       return (
         matchesSearch &&
         matchesPage &&
+        matchesForm &&
         matchesSource &&
         matchesKeyword &&
         matchesCompleteness &&
@@ -339,6 +449,7 @@ export default function LeadsManagementPage() {
     leads,
     search,
     selectedPageId,
+    selectedFormType,
     selectedSource,
     selectedKeyword,
     selectedCompleteness,
@@ -351,16 +462,26 @@ export default function LeadsManagementPage() {
   const handleExportCSV = () => {
     const exportRows = filteredLeads.map((lead) => {
       const dropInfo = getLeadDropInfo(lead);
+      const formTag = getLeadFormTag(lead);
+      const isHub =
+        lead.page_id === "page_frontend_hub" ||
+        lead.page_id === "public_hub" ||
+        lead.page?.slug === "" ||
+        lead.utm?.page_origin === "frontend_hub" ||
+        (lead.source || "").toLowerCase() === "website_hub";
+
       return {
         ID: lead.id,
         Name: lead.name || "Anonymous",
         Email: lead.email || "",
         Phone: lead.phone_e164 || "",
+        Form_Type: formTag.title,
+        Page: isHub ? `web page (${formTag.title})` : (lead.page?.name || lead.page_id),
+        Route: isHub ? "/" : (lead.page?.slug ? `/p/${lead.page.slug}` : "/direct"),
         Drop_Count: dropInfo.dropCount,
         Pages_Count: dropInfo.pageCount,
         Pages_List: dropInfo.pages.join("; "),
         Country: lead.country_code || "",
-        Page: lead.page?.name || lead.page_id,
         Status: lead.is_partial ? "Partial Dropoff" : "Completed Lead",
         Quiz_Score: lead.quiz_score ?? "",
         Quiz_Result: lead.quiz_result || "",
@@ -454,7 +575,7 @@ export default function LeadsManagementPage() {
         </div>
 
         {/* Filters Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 pt-2 border-t border-slate-100 text-xs">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 pt-2 border-t border-slate-100 text-xs">
           {/* Page Filter */}
           <div>
             <select
@@ -468,6 +589,23 @@ export default function LeadsManagementPage() {
                   {p.name}
                 </option>
               ))}
+            </select>
+          </div>
+
+          {/* Form Type Filter */}
+          <div>
+            <select
+              value={selectedFormType}
+              onChange={(e) => setSelectedFormType(e.target.value)}
+              className="w-full px-2.5 py-2 bg-blue-50/60 border border-blue-200 rounded-lg text-xs font-semibold text-blue-800"
+            >
+              <option value="all">All Form Types</option>
+              <option value="counselling">1:1 Free Counselling</option>
+              <option value="consultation">1:1 Consultation</option>
+              <option value="strategy_call">Strategy Call</option>
+              <option value="calculator">Calculator Assessment</option>
+              <option value="pdf">PDF Guide Download</option>
+              <option value="callback">Quick Callback</option>
             </select>
           </div>
 
@@ -643,50 +781,69 @@ export default function LeadsManagementPage() {
                   </div>
 
                   {/* Footer with Source Medium, Program & Quick Contact + Delete */}
-                  <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
-                    <div className="flex items-center gap-1.5 truncate max-w-[180px]">
-                      <span className="font-semibold text-slate-700 truncate">
-                        {cleanPageName(lead.page?.name || lead.quiz_result || "General Assessment")}
-                      </span>
-                      <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 text-[9px] font-bold">
-                        {lead.source || "direct"}
-                      </span>
-                    </div>
+                  {(() => {
+                    const isHubLead =
+                      lead.page_id === "page_frontend_hub" ||
+                      lead.page_id === "public_hub" ||
+                      lead.page?.slug === "" ||
+                      lead.page?.slug === "public-hub" ||
+                      lead.utm?.page_origin === "frontend_hub" ||
+                      (lead.source || "").toLowerCase() === "website_hub";
+                    const formTag = getLeadFormTag(lead);
 
-                    <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                      {lead.phone_e164 && (
-                        <a
-                          href={`https://wa.me/${lead.phone_e164.replace('+', '')}?text=Hi%20${encodeURIComponent(
-                            lead.name || ''
-                          )},%20thank%20you%20for%20contacting%20TerraTern.`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="p-2 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition"
-                          title="Chat on WhatsApp"
-                        >
-                          <MessageCircle className="w-4 h-4" />
-                        </a>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => handleOpenLeadDetails(lead)}
-                        className="px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-700 font-bold text-xs flex items-center gap-0.5"
-                      >
-                        <span>Details</span>
-                        <ChevronRight className="w-3.5 h-3.5" />
-                      </button>
-                      {isOwner && (
-                        <button
-                          type="button"
-                          onClick={() => setLeadToDelete(lead)}
-                          className="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 transition"
-                          title="Delete lead permanently"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
+                    return (
+                      <div className="flex flex-col gap-2 pt-2 border-t border-slate-100">
+                        <div className="flex items-center gap-1.5 flex-wrap text-xs">
+                          <span className="font-bold text-slate-900">
+                            {isHubLead ? `web page (${formTag.title})` : cleanPageName(lead.page?.name || lead.quiz_result || "General Assessment")}
+                          </span>
+                          <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 text-[9px] font-bold">
+                            {lead.source || "direct"}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between text-xs text-slate-500">
+                          <div className="text-[11px] text-slate-400 font-mono">
+                            {isHubLead ? "/" : (lead.page?.slug ? `/p/${lead.page.slug}` : "/direct")}
+                          </div>
+
+                          <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                            {lead.phone_e164 && (
+                              <a
+                                href={`https://wa.me/${lead.phone_e164.replace('+', '')}?text=Hi%20${encodeURIComponent(
+                                  lead.name || ''
+                                )},%20thank%20you%20for%20contacting%20TerraTern.`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="p-2 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition"
+                                title="Chat on WhatsApp"
+                              >
+                                <MessageCircle className="w-4 h-4" />
+                              </a>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleOpenLeadDetails(lead)}
+                              className="px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-700 font-bold text-xs flex items-center gap-0.5"
+                            >
+                              <span>Details</span>
+                              <ChevronRight className="w-3.5 h-3.5" />
+                            </button>
+                            {isOwner && (
+                              <button
+                                type="button"
+                                onClick={() => setLeadToDelete(lead)}
+                                className="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 transition"
+                                title="Delete lead permanently"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })}
@@ -782,27 +939,64 @@ export default function LeadsManagementPage() {
                           </div>
                         </td>
 
-                        {/* 5. Page */}
+                        {/* 5. Page & Form Tag */}
                         <td className="py-3.5 px-3">
-                          <div className="truncate max-w-[220px] font-bold text-slate-800 text-xs" title={lead.page?.name || displayName}>
-                            {displayName}
-                          </div>
-                          <div className="flex items-center gap-1.5 mt-0.5">
-                            {lead.page?.slug ? (
-                              <a
-                                href={`/p/${lead.page.slug}`}
-                                target="_blank"
-                                rel="noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                className="inline-flex items-center gap-1 text-[11px] font-mono text-blue-700 hover:text-blue-900 hover:underline"
-                              >
-                                <span>/{lead.page.slug}</span>
-                                <ExternalLink className="w-2.5 h-2.5 text-slate-400" />
-                              </a>
-                            ) : (
-                              <span className="text-slate-400 font-mono text-[11px]">/direct</span>
-                            )}
-                          </div>
+                          {(() => {
+                            const isHubLead =
+                              lead.page_id === "page_frontend_hub" ||
+                              lead.page_id === "public_hub" ||
+                              lead.page?.slug === "" ||
+                              lead.page?.slug === "public-hub" ||
+                              lead.utm?.page_origin === "frontend_hub" ||
+                              (lead.source || "").toLowerCase() === "website_hub";
+                            const formTag = getLeadFormTag(lead);
+
+                            if (isHubLead) {
+                              return (
+                                <div>
+                                  <div className="truncate max-w-[240px] font-bold text-slate-900 text-xs" title={`web page (${formTag.title})`}>
+                                    <span>web page ({formTag.title})</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 mt-0.5">
+                                    <a
+                                      href="/"
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="inline-flex items-center gap-1 text-[11px] font-mono text-blue-700 hover:text-blue-900 hover:underline"
+                                    >
+                                      <span>/</span>
+                                      <ExternalLink className="w-2.5 h-2.5 text-slate-400" />
+                                    </a>
+                                  </div>
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <div>
+                                <div className="truncate max-w-[240px] font-bold text-slate-900 text-xs" title={lead.page?.name || displayName}>
+                                  <span>{displayName}</span>
+                                </div>
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                  {lead.page?.slug ? (
+                                    <a
+                                      href={`/p/${lead.page.slug}`}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="inline-flex items-center gap-1 text-[11px] font-mono text-blue-700 hover:text-blue-900 hover:underline"
+                                    >
+                                      <span>/{lead.page.slug}</span>
+                                      <ExternalLink className="w-2.5 h-2.5 text-slate-400" />
+                                    </a>
+                                  ) : (
+                                    <span className="text-slate-400 font-mono text-[11px]">/direct</span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })()}
                         </td>
 
                         {/* 6. Source Medium */}
@@ -858,18 +1052,40 @@ export default function LeadsManagementPage() {
       )}
 
       {/* 4. Lead Timeline & Details Modal */}
-      {selectedLead && (
-        <Modal
-          isOpen={true}
-          onClose={() => setSelectedLead(null)}
-          title={selectedLead.name || "Lead Submission Details"}
-          description={`Captured on ${formatDate(selectedLead.created_at)} via ${
-            selectedLead.page?.name || "Lead Page"
-          }`}
-          maxWidth="xl"
-        >
-          <div className="space-y-6">
-            {/* Contact Card */}
+      {selectedLead && (() => {
+        const isHubLead =
+          selectedLead.page_id === "page_frontend_hub" ||
+          selectedLead.page_id === "public_hub" ||
+          selectedLead.page?.slug === "" ||
+          selectedLead.utm?.page_origin === "frontend_hub" ||
+          (selectedLead.source || "").toLowerCase() === "website_hub";
+        const formTag = getLeadFormTag(selectedLead);
+
+        return (
+          <Modal
+            isOpen={true}
+            onClose={() => setSelectedLead(null)}
+            title={selectedLead.name || "Lead Submission Details"}
+            description={`Captured on ${formatDate(selectedLead.created_at)} via ${
+              isHubLead ? `web page (${formTag.title})` : (selectedLead.page?.name || "Lead Page")
+            }`}
+            maxWidth="xl"
+          >
+            <div className="space-y-6">
+              {/* Form & Page Origin Banner */}
+              <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl flex items-center justify-between flex-wrap gap-2 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-slate-700">Origin:</span>
+                  <span className="font-bold text-blue-900">
+                    {isHubLead ? `web page (${formTag.title})` : (selectedLead.page?.name || "Direct")}
+                  </span>
+                  <code className="text-[11px] bg-white px-2 py-0.5 rounded border border-blue-200 text-blue-700 font-mono">
+                    {isHubLead ? "/" : (selectedLead.page?.slug ? `/p/${selectedLead.page.slug}` : "/direct")}
+                  </code>
+                </div>
+              </div>
+
+              {/* Contact Card */}
             <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs sm:text-sm">
               <div>
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
@@ -1079,7 +1295,7 @@ export default function LeadsManagementPage() {
             </div>
           </div>
         </Modal>
-      )}
+      ); })()}
 
       {/* 5. Delete Lead Confirmation Modal */}
       {leadToDelete && (

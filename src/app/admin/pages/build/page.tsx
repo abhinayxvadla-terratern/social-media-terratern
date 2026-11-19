@@ -257,6 +257,13 @@ export default function BuildPage() {
       <script src="${originUrl}/connect.js" data-page-key="${effectiveKey}" async></script>
     `;
 
+    // Ensure preview title is TerraTern
+    if (html.includes('<title>')) {
+      html = html.replace(/<title>[\s\S]*?<\/title>/i, '<title>TerraTern</title>');
+    } else if (html.includes('<head>')) {
+      html = html.replace('<head>', '<head><title>TerraTern</title>');
+    }
+
     // Ensure base href exists so relative assets and API links resolve
     if (html.includes('<head>')) {
       html = html.replace('<head>', `<head><base href="${originUrl}/">`);
@@ -642,7 +649,7 @@ export default function BuildPage() {
                 <iframe
                   key={previewKey}
                   srcDoc={previewHtml}
-                  title="Landing Page Live Preview"
+                  title="TerraTern"
                   className="w-full flex-1 border-0"
                   sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-downloads"
                 />

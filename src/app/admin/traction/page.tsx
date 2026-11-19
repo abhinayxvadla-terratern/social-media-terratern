@@ -5,7 +5,6 @@ import { createClient } from "@/lib/supabase/client";
 import {
   PageStat,
   DailyTrend,
-  AnswerDropoff,
   LeadsBySource,
   Page,
 } from "@/lib/types";
@@ -17,11 +16,6 @@ import {
 } from "@/lib/utils";
 import {
   TrendingUp,
-  Eye,
-  Play,
-  CheckCircle,
-  Users,
-  Percent,
   Calendar,
   Filter,
   RefreshCw,
@@ -41,14 +35,12 @@ export default function TractionAnalyticsPage() {
   const cachedTraction = getCachedData<{
     pageStats: PageStat[];
     dailyTrends: DailyTrend[];
-    answerDropoffs: AnswerDropoff[];
     leadsBySource: LeadsBySource[];
     pages: Page[];
   }>("admin_traction");
 
   const [pageStats, setPageStats] = useState<PageStat[]>(() => cachedTraction?.pageStats || []);
   const [dailyTrends, setDailyTrends] = useState<DailyTrend[]>(() => cachedTraction?.dailyTrends || []);
-  const [answerDropoffs, setAnswerDropoffs] = useState<AnswerDropoff[]>(() => cachedTraction?.answerDropoffs || []);
   const [leadsBySource, setLeadsBySource] = useState<LeadsBySource[]>(() => cachedTraction?.leadsBySource || []);
   const [pages, setPages] = useState<Page[]>(() => cachedTraction?.pages || []);
 
@@ -72,8 +64,9 @@ export default function TractionAnalyticsPage() {
         .select("id, name, slug")
         .order("name", { ascending: true });
 
-      const allPages = (pagesData as Page[]) || [];
-      if (pagesData) setPages(allPages);
+      const hubPageBrief = { id: "page_frontend_hub", name: "Webpage (/)", slug: "" } as Page;
+      const allPages = [hubPageBrief, ...((pagesData as Page[]) || [])];
+      setPages(allPages);
 
       // 2. Fetch page stats
       const { data: statsData, error: statsError } = await supabase
@@ -92,16 +85,7 @@ export default function TractionAnalyticsPage() {
       const allTrends = (trendsData as DailyTrend[]) || [];
       setDailyTrends(allTrends);
 
-      // 4. Fetch answer dropoff
-      const { data: dropoffData, error: dropoffError } = await supabase
-        .from("answer_dropoff")
-        .select("*")
-        .order("question_number", { ascending: true });
-      if (dropoffError) throw dropoffError;
-      const allDropoffs = (dropoffData as AnswerDropoff[]) || [];
-      setAnswerDropoffs(allDropoffs);
-
-      // 5. Fetch leads by source
+      // 4. Fetch leads by source
       const { data: sourceData, error: sourceError } = await supabase
         .from("leads_by_source")
         .select("*")
@@ -113,7 +97,6 @@ export default function TractionAnalyticsPage() {
       setCachedData("admin_traction", {
         pageStats: allStats,
         dailyTrends: allTrends,
-        answerDropoffs: allDropoffs,
         leadsBySource: allSources,
         pages: allPages,
       });
@@ -132,74 +115,143 @@ export default function TractionAnalyticsPage() {
   // Filter daily trends by selected page & date range
   const filteredTrends = useMemo(() => {
     return dailyTrends.filter((t) => {
-      // Page filter
-      if (selectedPageId !== "all" && t.page_id !== selectedPageId) {
-        return false;
+      // 1. Page filter
+      if (selectedPageId !== "all") {
+        if (selectedPageId === "page_frontend_hub") {
+          if (t.page_id !== "page_frontend_hub" && t.page_id !== "public_hub") return false;
+        } else if (t.page_id !== selectedPageId) {
+          return false;
+        }
       }
 
-      // Date range filter
+      // 2. Date range filter
       if (dateRange === "custom") {
         if (customStart && t.report_date < customStart) return false;
         if (customEnd && t.report_date > customEnd) return false;
         return true;
       }
 
-      const reportDate = new Date(t.report_date).getTime();
-      const now = Date.now();
-      const oneDay = 24 * 60 * 60 * 1000;
+      const now = new Date();
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      const reportTime = new Date(t.report_date).getTime();
 
       if (dateRange === "today") {
-        return now - reportDate <= oneDay;
+        return reportTime >= startOfToday;
       } else if (dateRange === "7d") {
-        return now - reportDate <= 7 * oneDay;
+        return reportTime >= startOfToday - 7 * 24 * 60 * 60 * 1000;
       } else if (dateRange === "30d") {
-        return now - reportDate <= 30 * oneDay;
+        return reportTime >= startOfToday - 30 * 24 * 60 * 60 * 1000;
       }
 
       return true;
     });
   }, [dailyTrends, selectedPageId, dateRange, customStart, customEnd]);
 
-  // Aggregate totals for the selected view
+  // Aggregate totals dynamically for the selected view & date range
   const aggregated = useMemo(() => {
-    const relevantStats =
-      selectedPageId === "all"
-        ? pageStats
-        : pageStats.filter((s) => s.page_id === selectedPageId);
+    // When filtered daily trends exist, calculate exactly from filtered trends
+    if (filteredTrends.length > 0) {
+      const views = filteredTrends.reduce((sum, t) => sum + Number(t.views || 0), 0);
+      const starts = filteredTrends.reduce((sum, t) => sum + Number(t.starts || 0), 0);
+      const submits = filteredTrends.reduce((sum, t) => sum + Number(t.submits || 0), 0);
+      const downloads = filteredTrends.reduce((sum, t) => sum + Number(t.downloads || 0), 0);
+      const leads = filteredTrends.reduce((sum, t) => sum + Number(t.leads || 0), 0);
+      const completeLeads = filteredTrends.reduce(
+        (sum, t) => sum + Number(t.complete_leads || 0),
+        0
+      );
+      const conversionRate = views > 0 ? (leads / views) * 100 : 0;
 
-    const views = relevantStats.reduce((sum, s) => sum + Number(s.views || 0), 0);
-    const starts = relevantStats.reduce((sum, s) => sum + Number(s.starts || 0), 0);
-    const submits = relevantStats.reduce((sum, s) => sum + Number(s.submits || 0), 0);
-    const downloads = relevantStats.reduce((sum, s) => sum + Number(s.downloads || 0), 0);
-    const leads = relevantStats.reduce((sum, s) => sum + Number(s.leads || 0), 0);
-    const completeLeads = relevantStats.reduce(
-      (sum, s) => sum + Number(s.complete_leads || 0),
-      0
-    );
+      return {
+        views,
+        starts,
+        submits,
+        downloads,
+        leads,
+        completeLeads,
+        conversionRate,
+      };
+    }
 
-    const conversionRate = views > 0 ? (leads / views) * 100 : 0;
+    // If daily_trends has no rows at all in DB, fall back to pageStats for all-time / 30d
+    if (dailyTrends.length === 0) {
+      const relevantStats =
+        selectedPageId === "all"
+          ? pageStats
+          : selectedPageId === "page_frontend_hub"
+          ? pageStats.filter((s) => s.page_id === "page_frontend_hub" || s.page_id === "public_hub")
+          : pageStats.filter((s) => s.page_id === selectedPageId);
 
+      const views = relevantStats.reduce((sum, s) => sum + Number(s.views || 0), 0);
+      const starts = relevantStats.reduce((sum, s) => sum + Number(s.starts || 0), 0);
+      const submits = relevantStats.reduce((sum, s) => sum + Number(s.submits || 0), 0);
+      const downloads = relevantStats.reduce((sum, s) => sum + Number(s.downloads || 0), 0);
+      const leads = relevantStats.reduce((sum, s) => sum + Number(s.leads || 0), 0);
+      const completeLeads = relevantStats.reduce(
+        (sum, s) => sum + Number(s.complete_leads || 0),
+        0
+      );
+      const conversionRate = views > 0 ? (leads / views) * 100 : 0;
+
+      return {
+        views,
+        starts,
+        submits,
+        downloads,
+        leads,
+        completeLeads,
+        conversionRate,
+      };
+    }
+
+    // Filter returned 0 rows for this specific timeframe
     return {
-      views,
-      starts,
-      submits,
-      downloads,
-      leads,
-      completeLeads,
-      conversionRate,
+      views: 0,
+      starts: 0,
+      submits: 0,
+      downloads: 0,
+      leads: 0,
+      completeLeads: 0,
+      conversionRate: 0,
     };
-  }, [pageStats, selectedPageId]);
+  }, [filteredTrends, dailyTrends, pageStats, selectedPageId]);
 
-  // Filtered drop-offs
-  const filteredDropoffs = useMemo(() => {
-    if (selectedPageId === "all") return answerDropoffs;
-    return answerDropoffs.filter((d) => d.page_id === selectedPageId);
-  }, [answerDropoffs, selectedPageId]);
+  // Filter marketing attribution leads by page & date range
+  const filteredSources = useMemo(() => {
+    return leadsBySource.filter((row) => {
+      // 1. Page filter
+      if (selectedPageId !== "all") {
+        if (selectedPageId === "page_frontend_hub") {
+          if (row.page_id !== "page_frontend_hub" && row.page_id !== "public_hub") return false;
+        } else if (row.page_id !== selectedPageId) {
+          return false;
+        }
+      }
 
-  // Max answers for relative percentage bar
-  const maxAnswers = useMemo(() => {
-    return Math.max(...filteredDropoffs.map((d) => Number(d.total_answers || 0)), 1);
-  }, [filteredDropoffs]);
+      // 2. Date range filter
+      if (!row.last_lead_at && !row.first_lead_at) return true;
+      const leadTime = new Date(row.last_lead_at || row.first_lead_at).getTime();
+
+      if (dateRange === "custom") {
+        if (customStart && leadTime < new Date(customStart).getTime()) return false;
+        if (customEnd && leadTime > new Date(customEnd + "T23:59:59").getTime()) return false;
+        return true;
+      }
+
+      const now = new Date();
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+
+      if (dateRange === "today") {
+        return leadTime >= startOfToday;
+      } else if (dateRange === "7d") {
+        return leadTime >= startOfToday - 7 * 24 * 60 * 60 * 1000;
+      } else if (dateRange === "30d") {
+        return leadTime >= startOfToday - 30 * 24 * 60 * 60 * 1000;
+      }
+
+      return true;
+    });
+  }, [leadsBySource, selectedPageId, dateRange, customStart, customEnd]);
 
   return (
     <div className="space-y-6">
@@ -268,216 +320,83 @@ export default function TractionAnalyticsPage() {
         </div>
       )}
 
-      {/* 2. Top Metric Cards (5 Cards: views, starts, submits, leads, conversion %) */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 sm:gap-4">
-        {/* Views */}
-        <div className="p-4 bg-white border border-slate-200/80 rounded-2xl shadow-sm space-y-1">
-          <div className="flex items-center justify-between text-slate-400">
-            <span className="text-[11px] font-bold uppercase tracking-wider">
-              Views
-            </span>
-            <Eye className="w-4 h-4 text-slate-400" />
-          </div>
-          <div className="text-2xl font-black text-slate-900">
-            {formatNumber(aggregated.views)}
-          </div>
-          <p className="text-[10px] text-slate-400">Total funnel traffic</p>
+      {/* Visual Funnel Progression */}
+      <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="font-extrabold text-sm sm:text-base text-slate-900 flex items-center gap-2">
+            <TrendingUp className="w-4 h-4 text-blue-600" />
+            <span>Funnel Progression</span>
+          </h3>
+          <span className="text-xs text-slate-400 font-medium">Step-by-step conversion pipeline</span>
         </div>
 
-        {/* Starts */}
-        <div className="p-4 bg-white border border-slate-200/80 rounded-2xl shadow-sm space-y-1">
-          <div className="flex items-center justify-between text-blue-600">
-            <span className="text-[11px] font-bold uppercase tracking-wider">
-              Starts
-            </span>
-            <Play className="w-4 h-4 text-blue-600" />
-          </div>
-          <div className="text-2xl font-black text-blue-600">
-            {formatNumber(aggregated.starts)}
-          </div>
-          <p className="text-[10px] text-slate-400">
-            {aggregated.views > 0
-              ? `${Math.round((aggregated.starts / aggregated.views) * 100)}% start rate`
-              : "0% start rate"}
-          </p>
-        </div>
-
-        {/* Submits */}
-        <div className="p-4 bg-white border border-slate-200/80 rounded-2xl shadow-sm space-y-1">
-          <div className="flex items-center justify-between text-indigo-600">
-            <span className="text-[11px] font-bold uppercase tracking-wider">
-              Submits
-            </span>
-            <CheckCircle className="w-4 h-4 text-indigo-600" />
-          </div>
-          <div className="text-2xl font-black text-indigo-600">
-            {formatNumber(aggregated.submits)}
-          </div>
-          <p className="text-[10px] text-slate-400">
-            {aggregated.starts > 0
-              ? `${Math.round((aggregated.submits / aggregated.starts) * 100)}% completion`
-              : "0% completion"}
-          </p>
-        </div>
-
-        {/* Leads */}
-        <div className="p-4 bg-white border border-slate-200/80 rounded-2xl shadow-sm space-y-1">
-          <div className="flex items-center justify-between text-emerald-600">
-            <span className="text-[11px] font-bold uppercase tracking-wider">
-              Leads
-            </span>
-            <Users className="w-4 h-4 text-emerald-600" />
-          </div>
-          <div className="text-2xl font-black text-emerald-600">
-            {formatNumber(aggregated.leads)}
-          </div>
-          <p className="text-[10px] text-slate-400">
-            {aggregated.completeLeads} complete submissions
-          </p>
-        </div>
-
-        {/* Conversion % */}
-        <div className="col-span-2 sm:col-span-1 p-4 bg-gradient-to-br from-blue-600 to-indigo-700 text-white rounded-2xl shadow-md shadow-blue-600/20 space-y-1">
-          <div className="flex items-center justify-between text-blue-200">
-            <span className="text-[11px] font-bold uppercase tracking-wider">
-              Conversion %
-            </span>
-            <Percent className="w-4 h-4 text-white" />
-          </div>
-          <div className="text-2xl font-black">
-            {formatPercentage(aggregated.conversionRate)}
-          </div>
-          <p className="text-[10px] text-blue-200">Leads divided by views</p>
-        </div>
-      </div>
-
-      {/* 3. Visual Funnel Progression & Answer Dropoff (Side-by-side on desktop, stacked on mobile) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Visual Funnel Progression */}
-        <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="font-extrabold text-sm sm:text-base text-slate-900 flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-blue-600" />
-              <span>Funnel Progression</span>
-            </h3>
-            <span className="text-xs text-slate-400 font-medium">Top to Bottom</span>
-          </div>
-
-          <div className="space-y-3 pt-2">
-            {/* Step 1: Views */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between text-xs font-semibold">
-                <span className="text-slate-600">1. Page Views</span>
-                <span className="text-slate-900 font-bold">{formatNumber(aggregated.views)} (100%)</span>
-              </div>
-              <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
-                <div className="h-full bg-slate-400 rounded-full w-full" />
-              </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+          {/* Step 1: Views */}
+          <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl space-y-2">
+            <div className="flex items-center justify-between text-xs font-semibold">
+              <span className="text-slate-600">1. Page Views</span>
+              <span className="text-slate-900 font-bold font-mono">100%</span>
             </div>
-
-            {/* Dropdown indicator */}
-            <div className="flex justify-center -my-1 text-slate-300">
-              <ArrowDown className="w-4 h-4" />
+            <div className="text-2xl font-black text-slate-900 font-mono">
+              {formatNumber(aggregated.views)}
             </div>
-
-            {/* Step 2: Engaged Starts */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between text-xs font-semibold">
-                <span className="text-slate-600">2. Engaged Visitors</span>
-                <span className="text-blue-600 font-bold">
-                  {formatNumber(aggregated.starts)} (
-                  {aggregated.views > 0
-                    ? Math.round((aggregated.starts / aggregated.views) * 100)
-                    : 0}
-                  %)
-                </span>
-              </div>
-              <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-blue-500 rounded-full transition-all duration-500"
-                  style={{
-                    width: `${
-                      aggregated.views > 0
-                        ? Math.min(100, Math.round((aggregated.starts / aggregated.views) * 100))
-                        : 0
-                    }%`,
-                  }}
-                />
-              </div>
+            <div className="h-2.5 bg-slate-200 rounded-full overflow-hidden">
+              <div className="h-full bg-slate-500 rounded-full w-full" />
             </div>
-
-            {/* Dropdown indicator */}
-            <div className="flex justify-center -my-1 text-slate-300">
-              <ArrowDown className="w-4 h-4" />
-            </div>
-
-            {/* Step 3: Captured Leads */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between text-xs font-semibold">
-                <span className="text-slate-600">3. Leads Captured</span>
-                <span className="text-emerald-600 font-bold">
-                  {formatNumber(aggregated.leads)} (
-                  {formatPercentage(aggregated.conversionRate)})
-                </span>
-              </div>
-              <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-emerald-500 rounded-full transition-all duration-500"
-                  style={{
-                    width: `${Math.min(100, Math.round(aggregated.conversionRate))}%`,
-                  }}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Answer Drop-off per Question */}
-        <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="font-extrabold text-sm sm:text-base text-slate-900 flex items-center gap-2">
-              <BarChart3 className="w-4 h-4 text-indigo-600" />
-              <span>Answer Drop-off per Question</span>
-            </h3>
-            <span className="text-xs text-slate-400 font-medium">Question Steps</span>
+            <p className="text-[11px] text-slate-400">Total funnel traffic</p>
           </div>
 
-          {filteredDropoffs.length === 0 ? (
-            <div className="p-8 text-center text-xs text-slate-400">
-              No quiz answer events recorded yet for this selection.
+          {/* Step 2: Engaged Starts */}
+          <div className="p-4 bg-blue-50/60 border border-blue-100 rounded-xl space-y-2">
+            <div className="flex items-center justify-between text-xs font-semibold">
+              <span className="text-blue-900">2. Engaged Visitors</span>
+              <span className="text-blue-700 font-bold font-mono">
+                {aggregated.views > 0
+                  ? Math.round((aggregated.starts / aggregated.views) * 100)
+                  : 0}%
+              </span>
             </div>
-          ) : (
-            <div className="space-y-3 pt-2">
-              {filteredDropoffs.map((item, idx) => {
-                const percent = Math.round((item.total_answers / maxAnswers) * 100);
-
-                return (
-                  <div key={idx} className="space-y-1">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-bold text-slate-700">
-                        Question #{item.question_number}
-                      </span>
-                      <div className="flex items-center gap-2 font-mono">
-                        <span className="font-bold text-slate-900">
-                          {formatNumber(item.total_answers)} answers
-                        </span>
-                        <span className="text-slate-400 text-[11px]">
-                          ({item.unique_respondents} users)
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="h-3 bg-slate-100 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-indigo-600 rounded-full transition-all duration-500"
-                        style={{ width: `${percent}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="text-2xl font-black text-blue-700 font-mono">
+              {formatNumber(aggregated.starts)}
             </div>
-          )}
+            <div className="h-2.5 bg-blue-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-blue-600 rounded-full transition-all duration-500"
+                style={{
+                  width: `${
+                    aggregated.views > 0
+                      ? Math.min(100, Math.round((aggregated.starts / aggregated.views) * 100))
+                      : 0
+                  }%`,
+                }}
+              />
+            </div>
+            <p className="text-[11px] text-blue-600/80">Started questionnaire / calculation</p>
+          </div>
+
+          {/* Step 3: Captured Leads */}
+          <div className="p-4 bg-emerald-50/60 border border-emerald-100 rounded-xl space-y-2">
+            <div className="flex items-center justify-between text-xs font-semibold">
+              <span className="text-emerald-900">3. Leads Captured</span>
+              <span className="text-emerald-700 font-bold font-mono">
+                {formatPercentage(aggregated.conversionRate)}
+              </span>
+            </div>
+            <div className="text-2xl font-black text-emerald-700 font-mono">
+              {formatNumber(aggregated.leads)}
+            </div>
+            <div className="h-2.5 bg-emerald-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-emerald-600 rounded-full transition-all duration-500"
+                style={{
+                  width: `${Math.min(100, Math.round(aggregated.conversionRate))}%`,
+                }}
+              />
+            </div>
+            <p className="text-[11px] text-emerald-600/80">
+              {aggregated.completeLeads} full submissions
+            </p>
+          </div>
         </div>
       </div>
 
@@ -491,7 +410,7 @@ export default function TractionAnalyticsPage() {
           <span className="text-xs text-slate-400 font-medium">Marketing Attribution</span>
         </div>
 
-        {leadsBySource.length === 0 ? (
+        {filteredSources.length === 0 ? (
           <div className="p-8 text-center text-xs text-slate-400">
             No source attribution recorded yet.
           </div>
@@ -509,7 +428,7 @@ export default function TractionAnalyticsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {leadsBySource.map((row, idx) => (
+                {filteredSources.map((row, idx) => (
                   <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
                     <td className="py-3 px-3 font-semibold text-slate-800">
                       {row.page_name}

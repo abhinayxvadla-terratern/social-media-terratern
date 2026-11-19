@@ -8,6 +8,7 @@ import { useAdmin } from '@/contexts/AdminContext';
 import { formatNumber, formatPercentage, formatDate } from '@/lib/utils';
 import { cleanPageName } from '@/lib/vibe-engine';
 import { getCachedData, setCachedData } from '@/lib/client-cache';
+import { FRONTEND_HUB_PAGE } from '@/lib/public-directory';
 import {
   Users,
   Eye,
@@ -225,10 +226,33 @@ export default function AdminOverviewDashboard() {
           .from('page_stats')
           .select('*');
 
-        const allPages = (pagesData as Page[]) || [];
+        const rawPagesList = (pagesData as Page[]) || [];
         const allLeads = (leadsData as unknown as Lead[]) || [];
         const allEvents = (eventsData as any[]) || [];
         const allStats = (pageStatsData as PageStat[]) || [];
+
+        // Add Frontend Calculators Hub as a tracked page in Overview
+        const hubLeadsCount = allLeads.filter(
+          (l) =>
+            l.page_id === "page_frontend_hub" ||
+            l.page_id === "public_hub" ||
+            l.page?.slug === "" ||
+            l.page?.slug === "public-hub" ||
+            l.utm?.page_origin === "frontend_hub" ||
+            (l.source || "").toLowerCase() === "website_hub"
+        ).length;
+
+        const hubStat = allStats.find((s) => s.page_id === "page_frontend_hub" || s.page_id === "public_hub");
+        const frontendViews = hubStat?.views ?? (hubLeadsCount > 0 ? hubLeadsCount : 0);
+        const hubPageRecord: Page = {
+          ...FRONTEND_HUB_PAGE,
+          leads_count: hubLeadsCount,
+          views_count: frontendViews,
+          status: "live",
+          conversion_percentage: frontendViews > 0 ? Number(((hubLeadsCount / frontendViews) * 100).toFixed(1)) : 0,
+        };
+
+        const allPages = [hubPageRecord, ...rawPagesList];
 
         setRawPages(allPages);
         setRawLeads(allLeads);
@@ -875,9 +899,11 @@ export default function AdminOverviewDashboard() {
                       ></span>
                       <div className="min-w-0">
                         <h4 className="font-bold text-slate-900 truncate" title={displayName}>
-                          {displayName}
+                          {page.slug === "" || page.page_key === "public_hub" ? "Webpage" : displayName}
                         </h4>
-                        <p className="text-[11px] text-slate-400 font-mono truncate">/p/{page.slug}</p>
+                        <p className="text-[11px] text-slate-400 font-mono truncate">
+                          {page.slug === "" || page.page_key === "public_hub" ? "/" : `/p/${page.slug}`}
+                        </p>
                       </div>
                     </div>
 
@@ -886,7 +912,7 @@ export default function AdminOverviewDashboard() {
                         {formatNumber(page.leads_count || 0)} {page.leads_count === 1 ? 'lead' : 'leads'}
                       </span>
                       <a
-                        href={`/p/${page.slug}`}
+                        href={page.slug === "" || page.page_key === "public_hub" ? "/" : `/p/${page.slug}`}
                         target="_blank"
                         rel="noreferrer"
                         className="p-1 text-slate-400 hover:text-slate-800 transition"
@@ -942,7 +968,14 @@ export default function AdminOverviewDashboard() {
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] text-slate-400 truncate">{lead.phone_e164 || lead.email}</p>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <p className="text-[11px] text-slate-400 truncate">{lead.phone_e164 || lead.email}</p>
+                        {(lead.page_id === "page_frontend_hub" || lead.utm?.page_origin === "frontend_hub" || lead.page?.slug === "") && (
+                          <span className="text-[9px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.2 rounded border border-blue-200">
+                            web page
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
 

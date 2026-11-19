@@ -64,7 +64,7 @@ export function synthesizeCustomHtml(config: VibePageConfig): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${config.name} | TerraTern Global Mobility</title>
+  <title>TerraTern</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -349,7 +349,7 @@ You MUST respond with valid JSON ONLY matching this structure:
     "cta_text": "Action button text",
     "theme_accent": "blue",
     "page_type": "custom",
-    "custom_html": "<!DOCTYPE html><html lang=\\"en\\"><head><meta charset=\\"UTF-8\\"><meta name=\\"viewport\\" content=\\"width=device-width, initial-scale=1.0\\"><title>Title</title><script src=\\"https://cdn.tailwindcss.com\\"></script><link href=\\"https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap\\" rel=\\"stylesheet\\"><style>body{font-family:'Plus Jakarta Sans',sans-serif;}</style></head><body class=\\"bg-slate-50 text-slate-800 antialiased min-h-screen\\">...full layout with hero, interactive widget, and lead capture form...</body></html>"
+    "custom_html": "<!DOCTYPE html><html lang=\\"en\\"><head><meta charset=\\"UTF-8\\"><meta name=\\"viewport\\" content=\\"width=device-width, initial-scale=1.0\\"><title>TerraTern</title><script src=\\"https://cdn.tailwindcss.com\\"></script><link href=\\"https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap\\" rel=\\"stylesheet\\"><style>body{font-family:'Plus Jakarta Sans',sans-serif;}</style></head><body class=\\"bg-slate-50 text-slate-800 antialiased min-h-screen\\">...full layout with hero, interactive widget, and lead capture form...</body></html>"
   },
   "message": "Friendly explanation of what was designed or modified.",
   "suggestions": ["Follow-up prompt 1", "Follow-up prompt 2", "Follow-up prompt 3"]

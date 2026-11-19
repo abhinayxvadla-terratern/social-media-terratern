@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "TerraTern — Lead Page Engine Admin",
-  description: "Administrative dashboard for TerraTern lead generation pages, quizzes, and conversion analytics.",
+  title: "TerraTern",
+  description: "TerraTern — One Stop Solution to Global Talent Mobility",
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },

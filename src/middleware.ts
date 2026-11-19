@@ -35,11 +35,6 @@ export async function middleware(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname;
 
-  // Root redirect
-  if (pathname === "/") {
-    return NextResponse.redirect(new URL("/admin/pages", request.url));
-  }
-
   // Admin routes protection (exempt public admin auth routes: /admin/login and /admin/join)
   if (
     pathname.startsWith("/admin") &&

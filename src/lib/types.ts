@@ -35,6 +35,19 @@ export interface Page {
   allowed_origins: string[];
   created_at: string;
   updated_at: string;
+  config?: {
+    show_in_directory?: boolean;
+    is_featured?: boolean;
+    category?: string;
+    badge_text?: string;
+    headline?: string;
+    subtitle?: string;
+    cta_text?: string;
+    est_time?: string;
+    country_tag?: string;
+    icon_type?: string;
+    [key: string]: any;
+  } | null;
   // Joined or calculated fields
   pdf_asset?: Asset | null;
   leads_count?: number;
