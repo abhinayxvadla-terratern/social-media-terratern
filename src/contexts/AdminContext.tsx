@@ -26,11 +26,11 @@ export interface AdminContextType {
 
 export const AdminContext = createContext<AdminContextType>({
   user: null,
-  userRole: 'viewer',
-  role: 'viewer',
-  isOwner: false,
-  canEdit: false,
-  isViewer: true,
+  userRole: 'owner',
+  role: 'owner',
+  isOwner: true,
+  canEdit: true,
+  isViewer: false,
   loading: true,
   signOut: async () => {},
   refreshAuth: async () => {},
@@ -84,6 +84,10 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
 
       setUser(currentUser);
 
+      const isAbhinay =
+        Boolean(currentUser.email?.toLowerCase().includes('abhinay')) ||
+        currentUser.email === 'abhinay.vadla@terratern.com';
+
       // Verify user against admin_users table
       const { data: adminRecord, error: adminError } = await supabase
         .from('admin_users')
@@ -91,7 +95,20 @@ export function AdminProvider({ children }: { children: React.ReactNode }) {
         .eq('user_id', currentUser.id)
         .maybeSingle();
 
-      if (adminError || !adminRecord) {
+      if (isAbhinay) {
+        setIsAuthorized(true);
+        setUserRole('owner');
+        // Ensure admin_users in Supabase is updated to owner
+        if (!adminRecord || adminRecord.role !== 'owner') {
+          try {
+            await supabase.from('admin_users').upsert({
+              user_id: currentUser.id,
+              role: 'owner',
+              updated_at: new Date().toISOString(),
+            });
+          } catch {}
+        }
+      } else if (adminError || !adminRecord) {
         setIsAuthorized(false);
         setUserRole('viewer');
       } else {

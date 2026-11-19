@@ -77,41 +77,44 @@ export function TerraTernLogo({
     );
   }
 
-  // Horizontal lockup (Emblem on left + authentic Wordmark on right)
+  // Horizontal lockup (Using official brand logo in all headers)
+  const logoSrc =
+    theme === 'light'
+      ? '/images/terratern-logo-white.png'
+      : '/images/terratern-header-logo.png';
+
+  const logoHeights = {
+    sm: 'h-7',
+    md: 'h-8',
+    lg: 'h-10',
+    xl: 'h-14',
+  };
+
   return (
-    <div className={`inline-flex items-center gap-2.5 select-none ${className}`}>
-      <div className={`relative ${emblemSizes[size]} flex-shrink-0`}>
+    <div className={`inline-flex items-center gap-2 select-none ${className}`}>
+      <div className={`relative ${logoHeights[size]} aspect-[901/281] flex-shrink-0`}>
         <Image
-          src="/images/terratern-emblem.png"
-          alt="TerraTern Emblem"
+          src={logoSrc}
+          alt="TerraTern"
           fill
-          className="object-contain"
+          className="object-contain object-left"
           priority
         />
       </div>
-      <div className="flex flex-col justify-center">
-        <div className="flex items-center gap-2">
-          <div className={`relative ${heights[size]} aspect-[484/85]`}>
-            <Image
-              src="/images/terratern-wordmark.png"
-              alt="TerraTern"
-              fill
-              className="object-contain object-left"
-              priority
-            />
-          </div>
+      {(showBadge || subtitle) && (
+        <div className="flex flex-col justify-center">
           {showBadge && (
             <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-[#255CC1] border border-blue-200/80 rounded px-1.5 py-0.5">
               Portal
             </span>
           )}
+          {subtitle && (
+            <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mt-[-2px]">
+              {subtitle}
+            </span>
+          )}
         </div>
-        {subtitle && (
-          <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mt-[-2px]">
-            {subtitle}
-          </span>
-        )}
-      </div>
+      )}
     </div>
   );
 }

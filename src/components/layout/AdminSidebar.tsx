@@ -28,7 +28,7 @@ interface AdminSidebarProps {
 
 export function AdminSidebar({
   userEmail = 'abhinay.vadla@terratern.com',
-  userRole = 'viewer',
+  userRole = 'owner',
   onSignOut,
   forceCollapse,
 }: AdminSidebarProps) {

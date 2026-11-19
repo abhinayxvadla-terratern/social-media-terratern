@@ -329,7 +329,7 @@ export default function TerraTernPublicCalculatorsHub() {
         <a className="brandlink" href="#top" aria-label="TerraTern home">
           <img
             className="brand"
-            src="/images/terratern-horizontal.png"
+            src="/images/terratern-header-logo.png"
             alt="TerraTern"
           />
         </a>

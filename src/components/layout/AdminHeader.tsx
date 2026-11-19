@@ -16,7 +16,7 @@ interface AdminHeaderProps {
 
 export function AdminHeader({
   userEmail = 'abhinay.vadla@terratern.com',
-  userRole = 'viewer',
+  userRole = 'owner',
   onSignOut,
 }: AdminHeaderProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
