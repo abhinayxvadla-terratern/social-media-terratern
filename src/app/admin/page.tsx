@@ -238,9 +238,32 @@ export default function AdminOverviewDashboard() {
             (l.source || "").toLowerCase() === "website_hub"
         ).length;
 
+        let liveWebTraffic = { views: 2450, form_clicks: 0 };
+        try {
+          const tRes = await fetch("/api/v1/traffic");
+          if (tRes.ok) {
+            const tJson = await tRes.json();
+            if (tJson?.data) {
+              liveWebTraffic = {
+                views: Number(tJson.data.views || 2450),
+                form_clicks: Number(tJson.data.form_clicks || 0),
+              };
+            }
+          }
+        } catch {}
+
         const hubStat = allStats.find((s) => s.page_id === "page_frontend_hub" || s.page_id === "public_hub");
         const storedViews = typeof window !== "undefined" ? Number(localStorage.getItem("tt_hub_traffic") || 0) : 0;
-        const frontendViews = Math.max(hubStat?.views ?? 0, FRONTEND_HUB_PAGE.views_count || 2450, storedViews, hubLeadsCount);
+        const storedClicks = typeof window !== "undefined" ? Number(localStorage.getItem("tt_hub_form_clicks") || 0) : 0;
+
+        const frontendViews = Math.max(hubStat?.views ?? 0, liveWebTraffic.views, storedViews, FRONTEND_HUB_PAGE.views_count || 2450);
+        const frontendClicks = Math.max(hubStat?.starts ?? 0, liveWebTraffic.form_clicks, storedClicks, hubLeadsCount);
+
+        // Web Page Conversion: Strictly based on form button clicks (intent traffic), not raw browsing views
+        const frontendConversion = frontendClicks > 0
+          ? Number(((hubLeadsCount / frontendClicks) * 100).toFixed(1))
+          : (hubLeadsCount > 0 ? 100 : 0);
+
         const hubPageRecord: Page = {
           ...FRONTEND_HUB_PAGE,
           name: "Web Page",
@@ -248,7 +271,11 @@ export default function AdminOverviewDashboard() {
           leads_count: hubLeadsCount,
           views_count: frontendViews,
           status: "live",
-          conversion_percentage: frontendViews > 0 ? Number(((hubLeadsCount / frontendViews) * 100).toFixed(1)) : 0,
+          conversion_percentage: frontendConversion,
+          config: {
+            ...(FRONTEND_HUB_PAGE.config || {}),
+            form_clicks: frontendClicks,
+          },
         };
 
         const allPages = [hubPageRecord, ...rawPagesList];

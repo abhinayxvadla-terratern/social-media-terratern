@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
     const [pagesRes, testSettingRes] = await Promise.all([
       supabase
         .from('pages')
-        .select('id, name, slug, page_type, status, page_url, config, created_at')
+        .select('id, name, slug, page_key, page_type, status, page_url, config, created_at')
         .eq('status', 'live')
         .order('created_at', { ascending: false }),
       supabase
@@ -135,14 +135,30 @@ export async function GET(req: NextRequest) {
     const seedMap = new Map<string, CalculatorItem>();
     SEED_CALCULATORS.forEach((c) => seedMap.set(c.slug, { ...c }));
 
+    const SLUG_ALIASES: Record<string, string> = {
+      "germany-eligibility-checker": "germany-opportunity-card",
+      "nursing-eligibility-checker-for-germany": "nurses-in-germany",
+      "eu-blue-card": "eu-blue-card-check",
+      "austria-job-seeker-visa": "austria-red-white-red",
+      "ireland-eligibility-checker": "ireland-eligibility-check",
+    };
+
     // Overlay any matching DB pages or append additional published calculators
     liveDbCalculators.forEach((dbCalc) => {
       if (dbCalc.slug && dbCalc.slug !== "" && dbCalc.slug !== "public-hub") {
-        if (seedMap.has(dbCalc.slug)) {
-          const existing = seedMap.get(dbCalc.slug)!;
-          seedMap.set(dbCalc.slug, {
+        const targetSlug = seedMap.has(dbCalc.slug)
+          ? dbCalc.slug
+          : SLUG_ALIASES[dbCalc.slug] && seedMap.has(SLUG_ALIASES[dbCalc.slug])
+          ? SLUG_ALIASES[dbCalc.slug]
+          : null;
+
+        if (targetSlug && seedMap.has(targetSlug)) {
+          const existing = seedMap.get(targetSlug)!;
+          seedMap.set(targetSlug, {
             ...existing,
             ...dbCalc,
+            id: dbCalc.id || existing.id,
+            page_key: dbCalc.page_key || existing.page_key,
             name: dbCalc.name || existing.name,
             desc: dbCalc.desc || existing.desc,
             is_hero: dbCalc.is_hero || existing.is_hero,

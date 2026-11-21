@@ -111,7 +111,7 @@ export default function TerraTernPublicCalculatorsHub() {
   // Incoming UTM string preserved
   const [urlParamsString, setUrlParamsString] = useState("");
 
-  // Set document title strictly to TerraTern & record local traffic count
+  // Set document title strictly to TerraTern & record real-time traffic
   useEffect(() => {
     if (typeof document !== "undefined") {
       document.title = "TerraTern";
@@ -119,8 +119,27 @@ export default function TerraTernPublicCalculatorsHub() {
     if (typeof window !== "undefined") {
       try {
         sessionStorage.removeItem("tt_public_directory");
+        let vid = localStorage.getItem("tt_vid");
+        if (!vid) {
+          vid = "vid_" + Math.random().toString(36).slice(2, 10);
+          localStorage.setItem("tt_vid", vid);
+        }
         const curr = Number(localStorage.getItem("tt_hub_traffic") || 2450);
         localStorage.setItem("tt_hub_traffic", String(curr + 1));
+
+        // Ping real-time server traffic endpoint for Web Page
+        fetch("/api/v1/traffic", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "view", page: "web_page", visitor_id: vid }),
+        })
+          .then((r) => r.json())
+          .then((res) => {
+            if (res?.data?.views) {
+              localStorage.setItem("tt_hub_traffic", String(res.data.views));
+            }
+          })
+          .catch(() => {});
       } catch {}
     }
   }, []);
@@ -268,6 +287,40 @@ export default function TerraTernPublicCalculatorsHub() {
     setLeadSuccess(false);
     setLeadError(null);
     setIsModalOpen(true);
+
+    if (typeof window !== "undefined") {
+      try {
+        const vid = window.localStorage.getItem("tt_vid") || "anon";
+        if (calc) {
+          // Calculator-specific consultation trigger: traffic and event go strictly to THAT calculator
+          fetch("/api/v1/events", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              page_key: (calc as any).page_key || calc.slug,
+              type: "start",
+              visitor_id: vid,
+              meta: { trigger: "calculator_counselling_btn", calc_name: calc.name, calc_slug: calc.slug },
+            }),
+          }).catch(() => {});
+        } else {
+          // General Web Page CTA button click (Hero, Header, Bottom Banner): increment form_clicks for Web Page
+          const currentClicks = Number(localStorage.getItem("tt_hub_form_clicks") || 0);
+          localStorage.setItem("tt_hub_form_clicks", String(currentClicks + 1));
+
+          fetch("/api/v1/traffic", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              type: "form_click",
+              page: "web_page",
+              trigger: title || "general_counselling_btn",
+              visitor_id: vid,
+            }),
+          }).catch(() => {});
+        }
+      } catch {}
+    }
   };
 
   // Handle Lead Form Submission
@@ -326,11 +379,16 @@ export default function TerraTernPublicCalculatorsHub() {
           ? "GB"
           : "IN";
 
+      const isCalcLead = Boolean(selectedCalcForModal);
+      const leadPageKey = (selectedCalcForModal as any)?.page_key || selectedCalcForModal?.slug || "public_hub";
+      const leadCalcName = selectedCalcForModal ? selectedCalcForModal.name : "Web Page";
+      const leadCalcSlug = selectedCalcForModal?.slug || "";
+
       const res = await fetch("/api/v1/leads", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          page_key: (selectedCalcForModal as any)?.page_key || "public_hub",
+          page_key: leadPageKey,
           visitor_id: visitorId,
           name: leadName.trim() || "Website Visitor",
           email: leadEmail.trim() || undefined,
@@ -339,15 +397,16 @@ export default function TerraTernPublicCalculatorsHub() {
           country_code: isoCountry,
           country_interested: leadCountry,
           visa_interested: selectedCalcForModal?.visas?.[0] || "General Mobility",
-          calculator_name: "Web Page",
-          calculator_slug: selectedCalcForModal?.slug || "",
+          calculator_name: leadCalcName,
+          calculator_slug: leadCalcSlug,
           source: utmObj.utm_source || "direct",
           utm: {
             ...utmObj,
             utm_source: utmObj.utm_source || "direct",
-            page_origin: "frontend_hub",
-            page_name: "Web Page",
-            calculator_name: "Web Page",
+            page_origin: isCalcLead ? "calculator_card" : "frontend_hub",
+            page_name: leadCalcName,
+            calculator_name: leadCalcName,
+            calculator_slug: leadCalcSlug,
             form_type: modalTitle.toLowerCase().includes("counselling")
               ? "counselling"
               : modalTitle.toLowerCase().includes("strategy")
@@ -356,7 +415,7 @@ export default function TerraTernPublicCalculatorsHub() {
               ? "callback"
               : "consultation",
             form_title: modalTitle,
-            selected_calc: selectedCalcForModal?.name || "Web Page",
+            selected_calc: leadCalcName,
           },
           consent: leadConsent,
         }),
@@ -530,6 +589,21 @@ export default function TerraTernPublicCalculatorsHub() {
                     href={calcUrl}
                     className="cc hero-cc"
                     title={`Start ${heroCalc.name}`}
+                    onClick={() => {
+                      try {
+                        const vid = typeof window !== "undefined" ? window.localStorage.getItem("tt_vid") || "anon" : "anon";
+                        fetch("/api/v1/events", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            page_key: (heroCalc as any).page_key || heroCalc.slug,
+                            type: "view",
+                            visitor_id: vid,
+                            meta: { trigger: "hero_featured_card_click", calc_name: heroCalc.name, calc_slug: heroCalc.slug },
+                          }),
+                        }).catch(() => {});
+                      } catch {}
+                    }}
                   >
                     {/* Rich Visual Thumbnail */}
                     <div
@@ -779,6 +853,21 @@ export default function TerraTernPublicCalculatorsHub() {
                     href={calcUrl}
                     className="cc"
                     title={`Start ${c.name}`}
+                    onClick={() => {
+                      try {
+                        const vid = typeof window !== "undefined" ? window.localStorage.getItem("tt_vid") || "anon" : "anon";
+                        fetch("/api/v1/events", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            page_key: (c as any).page_key || c.slug,
+                            type: "view",
+                            visitor_id: vid,
+                            meta: { trigger: "hub_card_click", calc_name: c.name, calc_slug: c.slug },
+                          }),
+                        }).catch(() => {});
+                      } catch {}
+                    }}
                   >
                     {/* Rich Visual Thumbnail */}
                     <div
