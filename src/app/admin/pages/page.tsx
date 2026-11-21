@@ -306,15 +306,15 @@ export default function PagesManagementPage() {
         };
       });
 
-      // Fetch live Web Page traffic & form clicks from dedicated traffic endpoint
-      let liveWebTraffic = { views: 2450, form_clicks: 0 };
+      // Fetch live Web Page traffic & form clicks from dedicated traffic endpoint (real-time, counting from now onwards)
+      let liveWebTraffic = { views: 0, form_clicks: 0 };
       try {
         const trafficRes = await fetch("/api/v1/traffic");
         if (trafficRes.ok) {
           const tJson = await trafficRes.json();
           if (tJson?.data) {
             liveWebTraffic = {
-              views: Number(tJson.data.views || 2450),
+              views: Number(tJson.data.views || 0),
               form_clicks: Number(tJson.data.form_clicks || 0),
             };
           }
@@ -324,14 +324,27 @@ export default function PagesManagementPage() {
       // Include Web Page (/) as a prominent first-class page in the pages table with verified real-time traffic
       const hubStat = statsMap.get("page_frontend_hub") || statsMap.get("public_hub");
       const frontendHubLeads = directLeadMap.get("page_frontend_hub") || directLeadMap.get("public_hub") || (hubStat?.leads ?? 0);
+
+      // Clear any legacy benchmark numbers (2450, 2451) in admin browser cache
+      if (typeof window !== "undefined") {
+        const legacyTraffic = localStorage.getItem("tt_hub_traffic");
+        if (legacyTraffic === "2450" || legacyTraffic === "2451") {
+          localStorage.removeItem("tt_hub_traffic");
+        }
+        const legacyManual = localStorage.getItem("tt_hub_manual_views");
+        if (legacyManual === "2450" || legacyManual === "2451") {
+          localStorage.removeItem("tt_hub_manual_views");
+        }
+      }
+
       const storedHubViews = typeof window !== "undefined" ? Number(localStorage.getItem("tt_hub_traffic") || 0) : 0;
       const storedHubClicks = typeof window !== "undefined" ? Number(localStorage.getItem("tt_hub_form_clicks") || 0) : 0;
       const manualHubViews = typeof window !== "undefined" ? localStorage.getItem("tt_hub_manual_views") : null;
 
-      // Real-time Web Page Traffic: Use manual views override if admin set one, otherwise live verified traffic
+      // Real-time Web Page Traffic: Use manual views override if admin set one, otherwise live verified traffic from now onwards
       const frontendViews = manualHubViews !== null && manualHubViews !== "" && !isNaN(Number(manualHubViews))
         ? Number(manualHubViews)
-        : Math.max(hubStat?.views ?? 0, liveWebTraffic.views, storedHubViews, FRONTEND_HUB_PAGE.views_count || 2450);
+        : Math.max(hubStat?.views ?? 0, liveWebTraffic.views, storedHubViews, 0);
 
       // Qualified Form Intent Traffic: ONLY users who clicked the form buttons on the web page
       const hubFormClicks = Math.max(hubStat?.starts ?? 0, liveWebTraffic.form_clicks, storedHubClicks, frontendHubLeads);
@@ -631,6 +644,13 @@ export default function PagesManagementPage() {
       if (editingPage.id === "page_frontend_hub" || editingPage.slug === "" || editingPage.page_key === "public_hub") {
         if (typeof window !== "undefined" && manualViews !== undefined) {
           localStorage.setItem("tt_hub_manual_views", String(manualViews));
+        }
+        if (manualViews !== undefined) {
+          fetch("/api/v1/traffic", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ type: "set_views", views: Number(manualViews) }),
+          }).catch(() => {});
         }
         setPages((prev) =>
           prev.map((p) =>

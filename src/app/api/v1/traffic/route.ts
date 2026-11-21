@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 
-// Base benchmark traffic for the main Web Page
-const BASE_BENCHMARK_VIEWS = 2450;
+// Base benchmark traffic for the main Web Page (starts from 0, counting from now onwards)
+const BASE_BENCHMARK_VIEWS = 0;
 const TRAFFIC_FILE_PATH = path.join(process.cwd(), '.next', 'tt_traffic.json');
 const TMP_TRAFFIC_PATH = path.join('/tmp', 'tt_traffic.json');
 
@@ -15,7 +15,7 @@ interface TrafficData {
 
 // Global in-memory counter cache
 let cachedTraffic: TrafficData = {
-  views: BASE_BENCHMARK_VIEWS,
+  views: 0,
   form_clicks: 0,
   last_updated: new Date().toISOString(),
 };
@@ -29,7 +29,7 @@ function readPersistedTraffic(): TrafficData {
         const parsed = JSON.parse(raw);
         if (typeof parsed.views === 'number') {
           cachedTraffic = {
-            views: Math.max(parsed.views, BASE_BENCHMARK_VIEWS),
+            views: Math.max(parsed.views, 0),
             form_clicks: Number(parsed.form_clicks || 0),
             last_updated: parsed.last_updated || new Date().toISOString(),
           };
@@ -114,6 +114,10 @@ export async function POST(req: NextRequest) {
     } else if (type === 'form_click') {
       // Increment general form button clicks (Hero, Header, Bottom Banner CTAs)
       current.form_clicks += 1;
+      current.last_updated = new Date().toISOString();
+      writePersistedTraffic(current);
+    } else if (type === 'set_views' || type === 'reset') {
+      current.views = typeof body.views === 'number' ? Math.max(0, body.views) : 0;
       current.last_updated = new Date().toISOString();
       writePersistedTraffic(current);
     }

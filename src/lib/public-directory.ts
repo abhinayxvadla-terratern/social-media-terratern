@@ -75,10 +75,10 @@ export const FRONTEND_HUB_PAGE = {
     is_hero_trending: false,
     hero_badge: "🔥 HIGH DEMAND",
     hero_cta_label: "Start Free Check",
-    views_count: 2450,
+    views_count: 0,
     is_frontend_hub: true,
   },
-  views_count: 2450,
+  views_count: 0,
   leads_count: 0,
   conversion_percentage: 0,
 };

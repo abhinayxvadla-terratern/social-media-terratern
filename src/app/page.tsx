@@ -147,10 +147,13 @@ export default function TerraTernPublicCalculatorsHub() {
           vid = "vid_" + Math.random().toString(36).slice(2, 10);
           localStorage.setItem("tt_vid", vid);
         }
-        const curr = Number(localStorage.getItem("tt_hub_traffic") || 2450);
-        localStorage.setItem("tt_hub_traffic", String(curr + 1));
+        // Clear any legacy benchmark numbers (2450, 2451)
+        const stored = localStorage.getItem("tt_hub_traffic");
+        if (stored === "2450" || stored === "2451") {
+          localStorage.removeItem("tt_hub_traffic");
+        }
 
-        // Ping real-time server traffic endpoint for Web Page
+        // Ping real-time server traffic endpoint for Web Page (strictly 1 view per visitor per 30 minutes)
         fetch("/api/v1/traffic", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -158,7 +161,7 @@ export default function TerraTernPublicCalculatorsHub() {
         })
           .then((r) => r.json())
           .then((res) => {
-            if (res?.data?.views) {
+            if (res?.data?.views !== undefined) {
               localStorage.setItem("tt_hub_traffic", String(res.data.views));
             }
           })

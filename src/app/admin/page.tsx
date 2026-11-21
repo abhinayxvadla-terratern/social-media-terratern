@@ -238,14 +238,14 @@ export default function AdminOverviewDashboard() {
             (l.source || "").toLowerCase() === "website_hub"
         ).length;
 
-        let liveWebTraffic = { views: 2450, form_clicks: 0 };
+        let liveWebTraffic = { views: 0, form_clicks: 0 };
         try {
           const tRes = await fetch("/api/v1/traffic");
           if (tRes.ok) {
             const tJson = await tRes.json();
             if (tJson?.data) {
               liveWebTraffic = {
-                views: Number(tJson.data.views || 2450),
+                views: Number(tJson.data.views || 0),
                 form_clicks: Number(tJson.data.form_clicks || 0),
               };
             }
@@ -253,10 +253,23 @@ export default function AdminOverviewDashboard() {
         } catch {}
 
         const hubStat = allStats.find((s) => s.page_id === "page_frontend_hub" || s.page_id === "public_hub");
+
+        // Clear legacy 2450/2451 cached views
+        if (typeof window !== "undefined") {
+          const legacyTraffic = localStorage.getItem("tt_hub_traffic");
+          if (legacyTraffic === "2450" || legacyTraffic === "2451") {
+            localStorage.removeItem("tt_hub_traffic");
+          }
+          const legacyManual = localStorage.getItem("tt_hub_manual_views");
+          if (legacyManual === "2450" || legacyManual === "2451") {
+            localStorage.removeItem("tt_hub_manual_views");
+          }
+        }
+
         const storedViews = typeof window !== "undefined" ? Number(localStorage.getItem("tt_hub_traffic") || 0) : 0;
         const storedClicks = typeof window !== "undefined" ? Number(localStorage.getItem("tt_hub_form_clicks") || 0) : 0;
 
-        const frontendViews = Math.max(hubStat?.views ?? 0, liveWebTraffic.views, storedViews, FRONTEND_HUB_PAGE.views_count || 2450);
+        const frontendViews = Math.max(hubStat?.views ?? 0, liveWebTraffic.views, storedViews, 0);
         const frontendClicks = Math.max(hubStat?.starts ?? 0, liveWebTraffic.form_clicks, storedClicks, hubLeadsCount);
 
         // Web Page Conversion: Strictly based on form button clicks (intent traffic), not raw browsing views
