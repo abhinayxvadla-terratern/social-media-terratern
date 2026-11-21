@@ -406,6 +406,7 @@ export default function AdminOverviewDashboard() {
     const totalLeads = filteredLeads.length;
     const completeLeads = filteredLeads.filter((l) => !l.is_partial).length;
     const partialLeads = filteredLeads.filter((l) => l.is_partial).length;
+    const activeLeads = leadType === 'complete' ? completeLeads : leadType === 'partial' ? partialLeads : totalLeads;
 
     // 4. Aggregate Event metrics
     let viewsFromEvents = 0;
@@ -433,16 +434,30 @@ export default function AdminOverviewDashboard() {
     });
 
     const isDateRestricted = timeRange !== 'all' && (timeRange !== 'custom' || Boolean(startDate || endDate));
+    const isSourceRestricted = selectedSource !== 'all';
 
-    const totalViews =
-      !isDateRestricted
-        ? Math.max(viewsFromStats, viewsFromEvents, totalLeads)
-        : Math.max(viewsFromEvents, totalLeads);
+    // Calculate source share ratio if filtered by source
+    const sourceRatio = isSourceRestricted && rawLeads.length > 0
+      ? Math.max(0.05, totalLeads / rawLeads.length)
+      : 1;
 
-    const totalStarts =
-      !isDateRestricted
-        ? Math.max(startsFromStats, startsFromEvents, totalLeads)
-        : Math.max(startsFromEvents, totalLeads);
+    let totalViews = 0;
+    if (isDateRestricted) {
+      totalViews = Math.max(viewsFromEvents, totalLeads);
+    } else if (isSourceRestricted) {
+      totalViews = Math.max(viewsFromEvents, Math.round(viewsFromStats * sourceRatio), totalLeads);
+    } else {
+      totalViews = Math.max(viewsFromStats, viewsFromEvents, totalLeads);
+    }
+
+    let totalStarts = 0;
+    if (isDateRestricted) {
+      totalStarts = Math.max(startsFromEvents, totalLeads);
+    } else if (isSourceRestricted) {
+      totalStarts = Math.max(startsFromEvents, Math.round(startsFromStats * sourceRatio), totalLeads);
+    } else {
+      totalStarts = Math.max(startsFromStats, startsFromEvents, totalLeads);
+    }
 
     const totalDownloads =
       !isDateRestricted
@@ -451,19 +466,12 @@ export default function AdminOverviewDashboard() {
 
     const conversionRate =
       totalViews > 0
-        ? (totalLeads / totalViews) * 100
-        : totalLeads > 0
+        ? Number(((activeLeads / totalViews) * 100).toFixed(1))
+        : activeLeads > 0
         ? 100
         : 0;
 
     // 5. Pages status
-    const relevantPages = selectedPageId !== 'all'
-      ? rawPages.filter((p) => p.id === selectedPageId)
-      : activePages;
-    const activePagesCount = relevantPages.filter((p) => p.status === 'live').length;
-    const totalPagesCount = relevantPages.length;
-
-    // 6. Pages ranking with filtered stats
     const pageLeadCounts = new Map<string, number>();
     filteredLeads.forEach((lead) => {
       if (lead.page_id) {
@@ -471,19 +479,37 @@ export default function AdminOverviewDashboard() {
       }
     });
 
-    const rankedPages = rawPages
+    const relevantPages = selectedPageId !== 'all'
+      ? rawPages.filter((p) => p.id === selectedPageId)
+      : activePages;
+
+    const activePagesCount = selectedPageId !== 'all'
+      ? relevantPages.filter((p) => p.status === 'live').length
+      : isFiltered
+      ? relevantPages.filter((p) => p.status === 'live' && (pageLeadCounts.get(p.id) || 0) > 0).length || (totalLeads === 0 ? 0 : relevantPages.filter((p) => p.status === 'live').length)
+      : relevantPages.filter((p) => p.status === 'live').length;
+
+    const totalPagesCount = selectedPageId !== 'all' ? 1 : relevantPages.length;
+
+    // 6. Pages ranking with filtered stats
+    const rankedPages = relevantPages
       .map((p) => {
         const directCount = pageLeadCounts.get(p.id) || 0;
         const stat = pageStats.find((s) => s.page_id === p.id);
         const leadsCount = isFiltered ? directCount : Math.max(stat?.leads ?? 0, directCount);
+        const pViews = isFiltered
+          ? Math.max(directCount, Math.round((stat?.views || 0) * (isSourceRestricted ? sourceRatio : 1)))
+          : (stat?.views || leadsCount);
+        const pConv = pViews > 0 ? Number(((leadsCount / pViews) * 100).toFixed(1)) : (leadsCount > 0 ? 100 : 0);
         return {
           ...p,
           leads_count: leadsCount,
-          conversion_percentage: stat?.conversion_percentage ?? (leadsCount > 0 ? 100 : 0),
+          conversion_percentage: pConv,
         };
       })
       .filter((p) => {
         if (selectedPageId !== 'all') return p.id === selectedPageId;
+        if (isFiltered && totalLeads > 0) return p.status === 'live' && (p.leads_count || 0) > 0;
         return p.status === 'live';
       })
       .sort((a, b) => (b.leads_count || 0) - (a.leads_count || 0));
@@ -795,10 +821,10 @@ export default function AdminOverviewDashboard() {
             </div>
           </div>
           <div className="text-2xl sm:text-3xl font-black text-[#00215C]">
-            {loading ? '—' : activePages.length}
+            {loading ? '—' : computedData.activePagesCount}
           </div>
           <p className="text-[11px] text-slate-500 font-medium">
-            Out of {rawPages.length} total pages
+            {isFiltered ? `${computedData.activePagesCount} active in selected filter` : `Out of ${rawPages.length} total pages`}
           </p>
         </div>
       </div>

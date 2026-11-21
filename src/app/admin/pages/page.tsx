@@ -326,9 +326,12 @@ export default function PagesManagementPage() {
       const frontendHubLeads = directLeadMap.get("page_frontend_hub") || directLeadMap.get("public_hub") || (hubStat?.leads ?? 0);
       const storedHubViews = typeof window !== "undefined" ? Number(localStorage.getItem("tt_hub_traffic") || 0) : 0;
       const storedHubClicks = typeof window !== "undefined" ? Number(localStorage.getItem("tt_hub_form_clicks") || 0) : 0;
+      const manualHubViews = typeof window !== "undefined" ? localStorage.getItem("tt_hub_manual_views") : null;
 
-      // Real-time Web Page Traffic (live visitors)
-      const frontendViews = Math.max(hubStat?.views ?? 0, liveWebTraffic.views, storedHubViews, FRONTEND_HUB_PAGE.views_count || 2450);
+      // Real-time Web Page Traffic: Use manual views override if admin set one, otherwise live verified traffic
+      const frontendViews = manualHubViews !== null && manualHubViews !== "" && !isNaN(Number(manualHubViews))
+        ? Number(manualHubViews)
+        : Math.max(hubStat?.views ?? 0, liveWebTraffic.views, storedHubViews, FRONTEND_HUB_PAGE.views_count || 2450);
 
       // Qualified Form Intent Traffic: ONLY users who clicked the form buttons on the web page
       const hubFormClicks = Math.max(hubStat?.starts ?? 0, liveWebTraffic.form_clicks, storedHubClicks, frontendHubLeads);
@@ -347,6 +350,7 @@ export default function PagesManagementPage() {
         conversion_percentage: frontendConversion,
         config: {
           ...(FRONTEND_HUB_PAGE.config || {}),
+          views_count: manualHubViews !== null && manualHubViews !== "" && !isNaN(Number(manualHubViews)) ? Number(manualHubViews) : frontendViews,
           form_clicks: hubFormClicks,
         },
       };
@@ -622,6 +626,32 @@ export default function PagesManagementPage() {
         ...(editingPage.config || {}),
         views_count: manualViews,
       };
+
+      // Special handler for Web Page (/)
+      if (editingPage.id === "page_frontend_hub" || editingPage.slug === "" || editingPage.page_key === "public_hub") {
+        if (typeof window !== "undefined" && manualViews !== undefined) {
+          localStorage.setItem("tt_hub_manual_views", String(manualViews));
+        }
+        setPages((prev) =>
+          prev.map((p) =>
+            p.id === editingPage.id || p.slug === "" || p.page_key === "public_hub"
+              ? {
+                  ...p,
+                  name: editingPage.name,
+                  status: editingPage.status,
+                  config: updatedConfig,
+                  views_count: manualViews !== undefined ? Number(manualViews) : p.views_count,
+                  conversion_percentage:
+                    manualViews && Number(manualViews) > 0
+                      ? Number((((p.leads_count || 0) / Number(manualViews)) * 100).toFixed(1))
+                      : p.conversion_percentage,
+                }
+              : p
+          )
+        );
+        setEditingPage(null);
+        return;
+      }
 
       const updatePayload = {
         name: editingPage.name,
@@ -1085,11 +1115,6 @@ export default function PagesManagementPage() {
                       <span className="text-sm font-black text-slate-800 block">
                         {formatNumber(page.views_count || 0)}
                       </span>
-                      {(page.page_key === "public_hub" || page.slug === "") && page.config?.form_clicks !== undefined && (
-                        <span className="text-[10px] text-blue-600 font-extrabold block">
-                          {formatNumber(page.config.form_clicks)} form clicks
-                        </span>
-                      )}
                     </div>
                     <div>
                       <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
@@ -1342,11 +1367,6 @@ export default function PagesManagementPage() {
                             <Eye className="w-3.5 h-3.5 text-slate-400" />
                             <span>{formatNumber(page.views_count || 0)}</span>
                           </div>
-                          {(page.page_key === "public_hub" || page.slug === "") && page.config?.form_clicks !== undefined && (
-                            <span className="block text-[10px] text-blue-600 font-bold mt-0.5">
-                              {formatNumber(page.config.form_clicks)} form clicks
-                            </span>
-                          )}
                         </td>
 
                         {/* 5. Leads Captured */}
@@ -2031,7 +2051,7 @@ export default function PagesManagementPage() {
             </div>
 
             {/* 3. Capsule Tag & Card Badges */}
-            <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3.5">
               <div className="flex items-center justify-between">
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
                   Capsule Tag (Top Pill on Card: Calculator, Visa, Guide, etc.)
@@ -2045,7 +2065,7 @@ export default function PagesManagementPage() {
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                 <input
                   type="text"
-                  placeholder="e.g. Calculator, Visa Check, Job Kit, Guide, PR Points"
+                  placeholder="e.g. Calculator, Visa Check, Job Kit, Guide, PR Points, or custom..."
                   value={editingPage.config?.capsule_tag || ""}
                   onChange={(e) =>
                     setEditingPage({
@@ -2059,7 +2079,10 @@ export default function PagesManagementPage() {
                   className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                 />
                 <div className="flex flex-wrap items-center gap-1">
-                  {["Calculator", "Visa Check", "Guide", "Job Kit", "PR Points", "CRS Score", "Quiz"].map((preset) => (
+                  {Array.from(new Set([
+                    "Calculator", "Visa Check", "Guide", "Job Kit", "PR Points", "CRS Score", "Quiz",
+                    ...(editingPage.config?.capsule_tag ? [editingPage.config.capsule_tag] : [])
+                  ])).map((preset) => (
                     <button
                       key={preset}
                       type="button"
@@ -2109,6 +2132,10 @@ export default function PagesManagementPage() {
                       { name: "Ireland", flag: "🇮🇪" },
                       { name: "UAE", flag: "🇦🇪" },
                       { name: "Global", flag: "🌐" },
+                      ...(editingPage.config?.country_tag &&
+                        !["germany", "austria", "sweden", "eu", "uk", "us", "canada", "australia", "ireland", "uae", "global"].includes(editingPage.config.country_tag.toLowerCase())
+                        ? [{ name: editingPage.config.country_tag, flag: "🌍" }]
+                        : [])
                     ].map((c) => (
                       <button
                         key={c.name}
@@ -2133,34 +2160,41 @@ export default function PagesManagementPage() {
                       </button>
                     ))}
                   </div>
-                  <input
-                    type="text"
-                    placeholder="Or type custom country (e.g. France, New Zealand)..."
-                    value={editingPage.config?.country_tag || ""}
-                    onChange={(e) =>
-                      setEditingPage({
-                        ...editingPage,
-                        config: {
-                          ...(editingPage.config || {}),
-                          country_tag: e.target.value,
-                        },
-                      })
-                    }
-                    className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
-                  />
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder="Add custom country (e.g. France, New Zealand, Singapore, Italy)..."
+                      value={editingPage.config?.country_tag || ""}
+                      onChange={(e) =>
+                        setEditingPage({
+                          ...editingPage,
+                          config: {
+                            ...(editingPage.config || {}),
+                            country_tag: e.target.value,
+                          },
+                        })
+                      }
+                      className="flex-1 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                    />
+                    {editingPage.config?.country_tag && (
+                      <span className="text-[11px] font-bold text-slate-500 bg-white px-2 py-1 rounded border border-slate-200">
+                        {editingPage.config.country_tag}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* 2. Card Icon Picker */}
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700">
-                      Card Floating Icon (Choose Icon for Badge)
+                      Card Floating Icon (Choose Icon or Add Custom Emoji)
                     </label>
                     <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
                       Selected: {editingPage.config?.icon_type || "calculator"}
                     </span>
                   </div>
-                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5 mb-2">
                     {[
                       { id: "calculator", label: "Calculator", icon: "🧮" },
                       { id: "compass", label: "Compass", icon: "🧭" },
@@ -2198,25 +2232,81 @@ export default function PagesManagementPage() {
                       </button>
                     ))}
                   </div>
+
+                  {/* Custom Emoji / Icon Input */}
+                  <div className="flex items-center gap-2 p-2 bg-white rounded-xl border border-slate-200">
+                    <span className="text-xs font-bold text-slate-600">Custom Icon / Emoji:</span>
+                    <input
+                      type="text"
+                      placeholder="Type custom emoji (e.g. 🚀, ⚡, 🎯, 💡, 🌐, 📊, 🌍) or icon name..."
+                      value={
+                        ["calculator", "compass", "briefcase", "graduation", "shield", "file", "plane", "card", "users", "heart", "award", "check"].includes(editingPage.config?.icon_type || "")
+                          ? ""
+                          : editingPage.config?.icon_type || ""
+                      }
+                      onChange={(e) =>
+                        setEditingPage({
+                          ...editingPage,
+                          config: {
+                            ...(editingPage.config || {}),
+                            icon_type: e.target.value || "calculator",
+                          },
+                        })
+                      }
+                      className="flex-1 px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800"
+                    />
+                    <div className="flex items-center gap-1">
+                      {["🚀", "⚡", "🎯", "💡", "🌐", "📊"].map((emo) => (
+                        <button
+                          key={emo}
+                          type="button"
+                          onClick={() =>
+                            setEditingPage({
+                              ...editingPage,
+                              config: {
+                                ...(editingPage.config || {}),
+                                icon_type: emo,
+                              },
+                            })
+                          }
+                          className="px-1.5 py-0.5 hover:bg-slate-100 rounded text-sm transition"
+                        >
+                          {emo}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200">
                 <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1">
-                    Category Filter
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700">
+                      Category Filter
+                    </label>
+                    {editingPage.config?.category && !["careers", "calculators", "guides", "visas", "consultation"].includes(editingPage.config.category) && (
+                      <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.2 rounded-full border border-blue-200">
+                        Custom Category
+                      </span>
+                    )}
+                  </div>
                   <select
-                    value={editingPage.config?.category || "calculators"}
-                    onChange={(e) =>
+                    value={
+                      ["careers", "calculators", "guides", "visas", "consultation"].includes(editingPage.config?.category || "calculators")
+                        ? editingPage.config?.category || "calculators"
+                        : "__custom__"
+                    }
+                    onChange={(e) => {
+                      const val = e.target.value;
                       setEditingPage({
                         ...editingPage,
                         config: {
                           ...(editingPage.config || {}),
-                          category: e.target.value,
+                          category: val === "__custom__" ? (editingPage.config?.category || "Tools") : val,
                         },
-                      })
-                    }
+                      });
+                    }}
                     className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700"
                   >
                     <option value="careers">💼 Careers &amp; Jobs</option>
@@ -2224,13 +2314,41 @@ export default function PagesManagementPage() {
                     <option value="guides">📘 Guides &amp; Checklists</option>
                     <option value="visas">✈️ Visas &amp; Mobility</option>
                     <option value="consultation">📞 1-on-1 Consultation</option>
+                    <option value="__custom__">➕ Add Custom Category...</option>
                   </select>
+
+                  {/* Custom Category Input if custom selected */}
+                  {(!["careers", "calculators", "guides", "visas", "consultation"].includes(editingPage.config?.category || "calculators") ||
+                    editingPage.config?.category === "__custom__") && (
+                    <div className="mt-2 animate-in fade-in duration-150">
+                      <input
+                        type="text"
+                        placeholder="Type custom category name (e.g. Tools, Scholarships, Sponsorships)..."
+                        value={editingPage.config?.category === "__custom__" ? "" : (editingPage.config?.category || "")}
+                        onChange={(e) =>
+                          setEditingPage({
+                            ...editingPage,
+                            config: {
+                              ...(editingPage.config || {}),
+                              category: e.target.value,
+                            },
+                          })
+                        }
+                        className="w-full px-3 py-1.5 bg-blue-50/40 border border-blue-200 rounded-lg text-xs font-bold text-[#00215C]"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1">
-                    Est. Time Tag
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700">
+                      Est. Time Tag
+                    </label>
+                    <span className="text-[10px] font-mono text-slate-400">
+                      {editingPage.config?.est_time || "60–90 sec"}
+                    </span>
+                  </div>
                   <input
                     type="text"
                     placeholder="e.g. 60 sec, 2 mins"
@@ -2244,8 +2362,32 @@ export default function PagesManagementPage() {
                         },
                       })
                     }
-                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs"
+                    className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs mb-1.5"
                   />
+                  <div className="flex flex-wrap items-center gap-1">
+                    {["30 sec", "60 sec", "90 sec", "2 mins", "3 mins", "5 mins"].map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() =>
+                          setEditingPage({
+                            ...editingPage,
+                            config: {
+                              ...(editingPage.config || {}),
+                              est_time: t,
+                            },
+                          })
+                        }
+                        className={`px-2 py-0.5 text-[10px] font-semibold rounded border transition ${
+                          editingPage.config?.est_time === t
+                            ? "bg-[#00215C] text-white border-[#00215C]"
+                            : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
+                        }`}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>

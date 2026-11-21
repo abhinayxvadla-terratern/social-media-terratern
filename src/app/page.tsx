@@ -55,9 +55,32 @@ const GIFT_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 const AV_COLORS = ['#F4C95D', '#9EBBF2', '#F3A29A', '#A8DDB5', '#C9B8F0'];
 
 export default function TerraTernPublicCalculatorsHub() {
-  // Always initialize directly with the 13 canonical calculators to guarantee 100% stable, zero-flash rendering
-  const [calculators, setCalculators] = useState<CalculatorItem[]>(SEED_CALCULATORS);
-  const [heroCalc, setHeroCalc] = useState<CalculatorItem>(SEED_CALCULATORS[0]);
+  // Initialize with verified canonical calculators or cached data to guarantee 100% stable, zero-flash rendering
+  const [calculators, setCalculators] = useState<CalculatorItem[]>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = localStorage.getItem("tt_public_calculators_cache");
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch {}
+    }
+    return SEED_CALCULATORS;
+  });
+
+  const [heroCalc, setHeroCalc] = useState<CalculatorItem>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cachedH = localStorage.getItem("tt_hero_calc_cache");
+        if (cachedH) {
+          const parsed = JSON.parse(cachedH);
+          if (parsed && parsed.slug) return parsed;
+        }
+      } catch {}
+    }
+    return SEED_CALCULATORS[0];
+  });
   const [testimonials, setTestimonials] = useState<TestimonialItem[]>(SEED_TESTIMONIALS);
   const [loading, setLoading] = useState(false);
 
@@ -156,11 +179,17 @@ export default function TerraTernPublicCalculatorsHub() {
         .then((res) => res.json())
         .then((data) => {
           if (data?.success) {
-            if (Array.isArray(data.calculators)) {
+            if (Array.isArray(data.calculators) && data.calculators.length > 0) {
               setCalculators(data.calculators);
+              try {
+                localStorage.setItem("tt_public_calculators_cache", JSON.stringify(data.calculators));
+              } catch {}
             }
             if (data.hero_calculator) {
               setHeroCalc(data.hero_calculator);
+              try {
+                localStorage.setItem("tt_hero_calc_cache", JSON.stringify(data.hero_calculator));
+              } catch {}
             }
             if (Array.isArray(data.testimonials) && data.testimonials.length > 0) {
               setTestimonials(data.testimonials);
@@ -206,6 +235,35 @@ export default function TerraTernPublicCalculatorsHub() {
       calcSection.scrollIntoView({ behavior: "smooth" });
     }
   };
+
+  // Dynamic list of countries and types based on active calculators so any custom added option is selectable
+  const allAvailableCountries = useMemo(() => {
+    const list: string[] = [];
+    COUNTRIES_LIST.filter((c) => c !== "All countries").forEach((c) => {
+      if (!list.includes(c)) list.push(c);
+    });
+    calculators.forEach((c) => {
+      (c.countries || []).forEach((country) => {
+        if (country && country.trim() && !list.includes(country.trim())) {
+          list.push(country.trim());
+        }
+      });
+    });
+    return list;
+  }, [calculators]);
+
+  const allAvailableTypes = useMemo(() => {
+    const list: string[] = [];
+    TYPES_LIST.filter((t) => t !== "All types").forEach((t) => {
+      if (!list.includes(t)) list.push(t);
+    });
+    calculators.forEach((c) => {
+      if (c.type && c.type.trim() && !list.includes(c.type.trim())) {
+        list.push(c.type.trim());
+      }
+    });
+    return list;
+  }, [calculators]);
 
   // Multi-select Filter & Search logic
   const filteredCalculators = useMemo(() => {
@@ -580,8 +638,8 @@ export default function TerraTernPublicCalculatorsHub() {
             <aside className="hero-calc-container" aria-label="Featured calculator">
               {(() => {
                 if (!heroCalc) return null;
-                const flagSvg = heroCalc.countries?.[0] ? FLAGS[heroCalc.countries[0]] : null;
-                const iconSvg = ICONS[heroCalc.icon] || ICONS.check;
+                const flagSvg = heroCalc.countries?.[0] ? FLAGS[heroCalc.countries[0]] || null : null;
+                const iconSvg = ICONS[heroCalc.icon] || (heroCalc.icon && heroCalc.icon.length <= 4 ? `<span style="font-size:22px;line-height:1;">${heroCalc.icon}</span>` : ICONS.check);
                 const cardGradient = getThumbnailGradient(heroCalc.countries, heroCalc.capsule_tag);
                 const calcUrl = appendUtms(heroCalc.url || `/p/${heroCalc.slug}`);
 
@@ -726,7 +784,7 @@ export default function TerraTernPublicCalculatorsHub() {
                         </button>
                       </div>
                       <div className="dd-menu-list">
-                        {COUNTRIES_LIST.filter(c => c !== "All countries").map((c) => {
+                        {allAvailableCountries.map((c) => {
                           const isSelected = selCountries.includes(c);
                           return (
                             <label key={c} className="dd-item">
@@ -739,8 +797,10 @@ export default function TerraTernPublicCalculatorsHub() {
                                   );
                                 }}
                               />
-                              {FLAGS[c] && (
+                              {FLAGS[c] ? (
                                 <span className="dd-flag" dangerouslySetInnerHTML={{ __html: FLAGS[c] }} />
+                              ) : (
+                                <span className="dd-flag text-xs">🌐</span>
                               )}
                               <span className="dd-text">{c}</span>
                             </label>
@@ -788,7 +848,7 @@ export default function TerraTernPublicCalculatorsHub() {
                         </button>
                       </div>
                       <div className="dd-menu-list">
-                        {TYPES_LIST.filter(t => t !== "All types").map((t) => {
+                        {allAvailableTypes.map((t) => {
                           const isSelected = selTypes.includes(t);
                           return (
                             <label key={t} className="dd-item">
@@ -843,8 +903,8 @@ export default function TerraTernPublicCalculatorsHub() {
             {/* 4-Column Card Grid (Max 3 rows x 4 = 12 cards) */}
             <div className="grid" id="grid">
               {visibleCalculators.map((c) => {
-                const flagSvg = FLAGS[c.countries[0]];
-                const iconSvg = ICONS[c.icon] || ICONS.check;
+                const flagSvg = c.countries?.[0] ? FLAGS[c.countries[0]] || null : null;
+                const iconSvg = ICONS[c.icon] || (c.icon && c.icon.length <= 4 ? `<span style="font-size:20px;line-height:1;">${c.icon}</span>` : ICONS.check);
                 const cardGradient = getThumbnailGradient(c.countries, c.capsule_tag);
                 const calcUrl = appendUtms(c.url || `/p/${c.slug}`);
 

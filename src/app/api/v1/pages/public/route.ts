@@ -138,7 +138,7 @@ export async function GET(req: NextRequest) {
         const type = p.page_type === 'lead_pdf'
           ? 'PDFs'
           : cfg.category
-          ? (cfg.category === 'calculators' ? 'Calculators' : cfg.category === 'visas' ? 'Visas' : cfg.category === 'guides' ? 'Guides' : cfg.category === 'careers' ? 'Careers' : 'Calculators')
+          ? (cfg.category === 'calculators' ? 'Calculators' : cfg.category === 'visas' ? 'Visas' : cfg.category === 'guides' ? 'Guides' : cfg.category === 'careers' ? 'Careers' : cfg.category === 'consultation' ? 'Consultation' : cfg.category)
           : targetSeed?.type || 'Calculators';
 
         return {
@@ -152,7 +152,7 @@ export async function GET(req: NextRequest) {
           type,
           capsule_tag: cfg.capsule_tag || targetSeed?.capsule_tag || (p.page_type === 'lead_pdf' ? 'PDF Guide' : p.page_type === 'quiz' ? 'Quiz' : 'Calculator'),
           thumbnail_url: cfg.thumbnail_url || targetSeed?.thumbnail_url || undefined,
-          views_count: typeof cfg.views_count === 'number' ? cfg.views_count : undefined,
+          views_count: typeof cfg.views_count === 'number' ? cfg.views_count : targetSeed?.views_count,
           profs: Array.isArray(cfg.profs) ? cfg.profs : (targetSeed?.profs || ['Any profession']),
           goals: Array.isArray(cfg.goals) ? cfg.goals : (targetSeed?.goals || ['Work', 'Study']),
           rank: cfg.rank || (cfg.is_hero_trending ? 100 : targetSeed?.rank || 10),
