@@ -90,50 +90,13 @@ export async function GET(req: NextRequest) {
       return "compass";
     };
 
-    // Transform DB rows into CalculatorItem
-    const liveDbCalculators: CalculatorItem[] = (dbPages || [])
-      .filter((p) => {
-        if (p.config && p.config.show_in_directory === false) return false;
-        return true;
-      })
-      .map((p) => {
-        const cfg = p.config || {};
-        const detectedCountry = detectCountry(`${p.name} ${p.slug} ${cfg.subtitle || ""} ${cfg.keyword || ""}`);
-        const detectedIcon = detectIcon(`${p.name} ${p.slug} ${cfg.subtitle || ""}`, p.page_type);
-
-        const country = cfg.country_tag ? [cfg.country_tag] : (Array.isArray(cfg.countries) && cfg.countries.length > 0 ? cfg.countries : [detectedCountry]);
-        const icon = cfg.icon_type || cfg.icon || detectedIcon;
-        const visa = cfg.visa_type ? [cfg.visa_type] : (Array.isArray(cfg.visas) && cfg.visas.length > 0 ? cfg.visas : [p.page_type === 'lead_pdf' ? 'Study' : 'Skilled Worker']);
-        const type = p.page_type === 'lead_pdf' ? 'PDFs' : (cfg.category ? (cfg.category === 'calculators' ? 'Calculators' : cfg.category === 'visas' ? 'Visas' : cfg.category === 'guides' ? 'Guides' : cfg.category === 'careers' ? 'Careers' : 'Calculators') : 'Calculators');
-
-        return {
-          id: p.id,
-          name: p.name,
-          slug: p.slug,
-          desc: cfg.subtitle || cfg.headline || 'Find out your eligibility under official immigration and visa criteria.',
-          icon,
-          countries: Array.isArray(cfg.countries) && cfg.countries.length > 0 && cfg.country_tag === undefined ? cfg.countries : country,
-          visas: Array.isArray(cfg.visas) ? cfg.visas : visa,
-          type,
-          capsule_tag: cfg.capsule_tag || (p.page_type === 'lead_pdf' ? 'PDF Guide' : p.page_type === 'quiz' ? 'Quiz' : 'Calculator'),
-          thumbnail_url: cfg.thumbnail_url || undefined,
-          views_count: typeof cfg.views_count === 'number' ? cfg.views_count : (typeof (p as any).views_count === 'number' ? (p as any).views_count : undefined),
-          profs: Array.isArray(cfg.profs) ? cfg.profs : ['Any profession'],
-          goals: Array.isArray(cfg.goals) ? cfg.goals : ['Work', 'Study'],
-          rank: cfg.rank || (cfg.is_hero_trending ? 100 : 10),
-          hot: Boolean(cfg.hot || cfg.is_hero_trending),
-          is_hero: Boolean(cfg.is_hero_trending),
-          hero_badge: cfg.hero_badge || "🔥 HIGH DEMAND",
-          hero_cta_label: cfg.hero_cta_label || "Start Free Check",
-          url: p.page_url || `/p/${p.slug}`,
-          page_key: (p as any).page_key || cfg.page_key || p.slug,
-        };
-      });
-
-    // Merge live DB pages with SEED_CALCULATORS so the 13 original calculators ALWAYS remain stable,
-    // guaranteeing ZERO flash, ZERO color changes, and 100% reliable rendering on refresh.
-    const seedMap = new Map<string, CalculatorItem>();
-    SEED_CALCULATORS.forEach((c) => seedMap.set(c.slug, { ...c }));
+    // 1. Filter DB pages to strictly ONLY those made live AND enabled for public view in webpage
+    const livePublicDbPages = (dbPages || []).filter((p) => {
+      if (p.status !== 'live') return false;
+      if (p.slug === '' || p.slug === 'public-hub' || p.page_key === 'public_hub') return false;
+      if (p.config && p.config.show_in_directory === false) return false;
+      return true;
+    });
 
     const SLUG_ALIASES: Record<string, string> = {
       "germany-eligibility-checker": "germany-opportunity-card",
@@ -143,34 +106,67 @@ export async function GET(req: NextRequest) {
       "ireland-eligibility-checker": "ireland-eligibility-check",
     };
 
-    // Overlay any matching DB pages or append additional published calculators
-    liveDbCalculators.forEach((dbCalc) => {
-      if (dbCalc.slug && dbCalc.slug !== "" && dbCalc.slug !== "public-hub") {
-        const targetSlug = seedMap.has(dbCalc.slug)
-          ? dbCalc.slug
-          : SLUG_ALIASES[dbCalc.slug] && seedMap.has(SLUG_ALIASES[dbCalc.slug])
-          ? SLUG_ALIASES[dbCalc.slug]
-          : null;
+    // 2. Build index of SEED_CALCULATORS for visual enrichment (custom gradients, tags, flags, icons)
+    const seedTemplateMap = new Map<string, CalculatorItem>();
+    SEED_CALCULATORS.forEach((c) => seedTemplateMap.set(c.slug, c));
 
-        if (targetSlug && seedMap.has(targetSlug)) {
-          const existing = seedMap.get(targetSlug)!;
-          seedMap.set(targetSlug, {
-            ...existing,
-            ...dbCalc,
-            id: dbCalc.id || existing.id,
-            page_key: dbCalc.page_key || existing.page_key,
-            name: dbCalc.name || existing.name,
-            desc: dbCalc.desc || existing.desc,
-            is_hero: dbCalc.is_hero || existing.is_hero,
-            rank: dbCalc.rank || existing.rank,
-          });
-        } else {
-          seedMap.set(dbCalc.slug, dbCalc);
-        }
-      }
-    });
+    // 3. Construct active calculators strictly from live, public-view-enabled pages
+    let activeCalculators: CalculatorItem[] = [];
 
-    const activeCalculators: CalculatorItem[] = Array.from(seedMap.values());
+    if (livePublicDbPages.length > 0) {
+      activeCalculators = livePublicDbPages.map((p) => {
+        const cfg = p.config || {};
+        const targetSeed = seedTemplateMap.get(p.slug) ||
+          (SLUG_ALIASES[p.slug] ? seedTemplateMap.get(SLUG_ALIASES[p.slug]) : undefined);
+
+        const detectedCountry = detectCountry(`${p.name} ${p.slug} ${cfg.subtitle || ""} ${cfg.keyword || ""}`);
+        const detectedIcon = detectIcon(`${p.name} ${p.slug} ${cfg.subtitle || ""}`, p.page_type);
+
+        const country = cfg.country_tag
+          ? [cfg.country_tag]
+          : Array.isArray(cfg.countries) && cfg.countries.length > 0
+          ? cfg.countries
+          : targetSeed?.countries || [detectedCountry];
+
+        const icon = cfg.icon_type || cfg.icon || targetSeed?.icon || detectedIcon;
+        const visa = cfg.visa_type
+          ? [cfg.visa_type]
+          : Array.isArray(cfg.visas) && cfg.visas.length > 0
+          ? cfg.visas
+          : targetSeed?.visas || [p.page_type === 'lead_pdf' ? 'Study' : 'Skilled Worker'];
+
+        const type = p.page_type === 'lead_pdf'
+          ? 'PDFs'
+          : cfg.category
+          ? (cfg.category === 'calculators' ? 'Calculators' : cfg.category === 'visas' ? 'Visas' : cfg.category === 'guides' ? 'Guides' : cfg.category === 'careers' ? 'Careers' : 'Calculators')
+          : targetSeed?.type || 'Calculators';
+
+        return {
+          id: p.id,
+          name: p.name,
+          slug: p.slug,
+          desc: cfg.subtitle || cfg.headline || targetSeed?.desc || 'Find out your eligibility under official immigration and visa criteria.',
+          icon,
+          countries: country,
+          visas: visa,
+          type,
+          capsule_tag: cfg.capsule_tag || targetSeed?.capsule_tag || (p.page_type === 'lead_pdf' ? 'PDF Guide' : p.page_type === 'quiz' ? 'Quiz' : 'Calculator'),
+          thumbnail_url: cfg.thumbnail_url || targetSeed?.thumbnail_url || undefined,
+          views_count: typeof cfg.views_count === 'number' ? cfg.views_count : undefined,
+          profs: Array.isArray(cfg.profs) ? cfg.profs : (targetSeed?.profs || ['Any profession']),
+          goals: Array.isArray(cfg.goals) ? cfg.goals : (targetSeed?.goals || ['Work', 'Study']),
+          rank: cfg.rank || (cfg.is_hero_trending ? 100 : targetSeed?.rank || 10),
+          hot: Boolean(cfg.hot || cfg.is_hero_trending || targetSeed?.hot),
+          is_hero: Boolean(cfg.is_hero_trending || targetSeed?.is_hero),
+          hero_badge: cfg.hero_badge || targetSeed?.hero_badge || "🔥 HIGH DEMAND",
+          hero_cta_label: cfg.hero_cta_label || targetSeed?.hero_cta_label || "Start Free Check",
+          url: p.page_url || `/p/${p.slug}`,
+          page_key: p.page_key || (p as any).page_key || cfg.page_key || p.slug,
+        };
+      });
+    } else {
+      activeCalculators = [];
+    }
 
     // Determine Hero Calculator:
     // First priority: any item explicitly marked with is_hero = true
@@ -178,7 +174,7 @@ export async function GET(req: NextRequest) {
     // Fallback: first item
     let hero = activeCalculators.find((c) => c.is_hero);
     if (!hero) {
-      hero = activeCalculators.find((c) => c.hot) || activeCalculators[0];
+      hero = activeCalculators.find((c) => c.hot) || (activeCalculators.length > 0 ? activeCalculators[0] : undefined);
     }
 
     return NextResponse.json(

@@ -156,7 +156,7 @@ export default function TerraTernPublicCalculatorsHub() {
         .then((res) => res.json())
         .then((data) => {
           if (data?.success) {
-            if (Array.isArray(data.calculators) && data.calculators.length > 0) {
+            if (Array.isArray(data.calculators)) {
               setCalculators(data.calculators);
             }
             if (data.hero_calculator) {
@@ -579,7 +579,8 @@ export default function TerraTernPublicCalculatorsHub() {
             {/* Right Hero Column: Exact Calculator Section Component Design in Hero Size */}
             <aside className="hero-calc-container" aria-label="Featured calculator">
               {(() => {
-                const flagSvg = heroCalc.countries[0] ? FLAGS[heroCalc.countries[0]] : null;
+                if (!heroCalc) return null;
+                const flagSvg = heroCalc.countries?.[0] ? FLAGS[heroCalc.countries[0]] : null;
                 const iconSvg = ICONS[heroCalc.icon] || ICONS.check;
                 const cardGradient = getThumbnailGradient(heroCalc.countries, heroCalc.capsule_tag);
                 const calcUrl = appendUtms(heroCalc.url || `/p/${heroCalc.slug}`);

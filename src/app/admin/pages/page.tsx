@@ -443,26 +443,32 @@ export default function PagesManagementPage() {
     }
   };
 
-  // Toggle Public Bio Directory visibility on row
+  // Toggle Public Webpage visibility on row
   const handleToggleHubVisibility = async (page: Page) => {
     if (!canEdit) return;
-    const currentShow = page.config?.show_in_directory !== false;
-    const nextShow = !currentShow;
+    const isCurrentlyLiveOnWebpage = page.status === "live" && page.config?.show_in_directory !== false;
+    const nextShow = !isCurrentlyLiveOnWebpage;
+    const nextStatus = nextShow && page.status !== "live" ? "live" : page.status;
     const newConfig = { ...(page.config || {}), show_in_directory: nextShow };
 
     try {
+      const updatePayload: any = { config: newConfig, updated_at: new Date().toISOString() };
+      if (nextShow && page.status !== "live") {
+        updatePayload.status = "live";
+      }
+
       const { error } = await supabase
         .from("pages")
-        .update({ config: newConfig, updated_at: new Date().toISOString() })
+        .update(updatePayload)
         .eq("id", page.id);
 
       if (error) throw error;
 
       setPages((prev) =>
-        prev.map((p) => (p.id === page.id ? { ...p, config: newConfig } : p))
+        prev.map((p) => (p.id === page.id ? { ...p, status: nextStatus, config: newConfig } : p))
       );
     } catch (err: any) {
-      alert("Error updating hub visibility: " + err.message);
+      alert("Error updating webpage visibility: " + err.message);
     }
   };
 
@@ -1024,6 +1030,48 @@ export default function PagesManagementPage() {
                         <StatusBadge status={page.status} />
                       )}
 
+                      {page.page_key !== "public_hub" && page.slug !== "" && (
+                        <div className="mt-1">
+                          {canEdit ? (
+                            <button
+                              type="button"
+                              onClick={() => handleToggleHubVisibility(page)}
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border transition shadow-2xs ${
+                                isLive && page.config?.show_in_directory !== false
+                                  ? "bg-blue-50 text-blue-700 border-blue-200"
+                                  : "bg-slate-100 text-slate-500 border-slate-200"
+                              }`}
+                              title="Toggle public webpage visibility"
+                            >
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full ${
+                                  isLive && page.config?.show_in_directory !== false
+                                    ? "bg-blue-600"
+                                    : "bg-slate-400"
+                                }`}
+                              />
+                              <span>
+                                {isLive && page.config?.show_in_directory !== false
+                                  ? "Live on Webpage"
+                                  : "Hidden from Webpage"}
+                              </span>
+                            </button>
+                          ) : (
+                            <span
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                isLive && page.config?.show_in_directory !== false
+                                  ? "bg-blue-50 text-blue-700"
+                                  : "bg-slate-100 text-slate-500"
+                              }`}
+                            >
+                              {isLive && page.config?.show_in_directory !== false
+                                ? "Live on Webpage"
+                                : "Hidden from Webpage"}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
 
                     </div>
                   </div>
@@ -1236,6 +1284,54 @@ export default function PagesManagementPage() {
                           ) : (
                             <StatusBadge status={page.status} />
                           )}
+
+                          {page.page_key !== "public_hub" && page.slug !== "" && (
+                            <div className="mt-1.5">
+                              {canEdit ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleHubVisibility(page)}
+                                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border transition shadow-2xs ${
+                                    isLive && page.config?.show_in_directory !== false
+                                      ? "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+                                      : "bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200"
+                                  }`}
+                                  title={
+                                    isLive && page.config?.show_in_directory !== false
+                                      ? "Live on Webpage: Click to hide"
+                                      : !isLive
+                                      ? "Hidden: Page must be Live to show on webpage"
+                                      : "Hidden from Webpage: Click to show on webpage"
+                                  }
+                                >
+                                  <span
+                                    className={`w-1.5 h-1.5 rounded-full ${
+                                      isLive && page.config?.show_in_directory !== false
+                                        ? "bg-blue-600"
+                                        : "bg-slate-400"
+                                    }`}
+                                  />
+                                  <span>
+                                    {isLive && page.config?.show_in_directory !== false
+                                      ? "Live on Webpage"
+                                      : "Hidden from Webpage"}
+                                  </span>
+                                </button>
+                              ) : (
+                                <span
+                                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                    isLive && page.config?.show_in_directory !== false
+                                      ? "bg-blue-50 text-blue-700"
+                                      : "bg-slate-100 text-slate-500"
+                                  }`}
+                                >
+                                  {isLive && page.config?.show_in_directory !== false
+                                    ? "Live on Webpage"
+                                    : "Hidden"}
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </td>
 
 
@@ -1347,13 +1443,15 @@ export default function PagesManagementPage() {
                   <span className="font-bold text-slate-800">
                     Status: <span className="capitalize text-blue-700">{editingPage.status}</span>
                   </span>
-                  {editingPage.config?.show_in_directory !== false ? (
-                    <span className="px-2 py-0.5 text-[10px] font-bold bg-emerald-100 text-emerald-800 rounded-full border border-emerald-200">
-                      Live in Hub
+                  {editingPage.status === "live" && editingPage.config?.show_in_directory !== false ? (
+                    <span className="px-2 py-0.5 text-[10px] font-bold bg-emerald-100 text-emerald-800 rounded-full border border-emerald-200 inline-flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                      Live on Webpage
                     </span>
                   ) : (
-                    <span className="px-2 py-0.5 text-[10px] font-bold bg-slate-200 text-slate-600 rounded-full">
-                      Hidden from Hub
+                    <span className="px-2 py-0.5 text-[10px] font-bold bg-slate-200 text-slate-600 rounded-full inline-flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                      Hidden from Webpage
                     </span>
                   )}
                 </div>
@@ -1644,12 +1742,12 @@ export default function PagesManagementPage() {
 
               {/* Status Switch & Set View Number */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Give to Live in Page Toggle */}
+                {/* Page Status (Live / Draft) Toggle */}
                 <div className="p-3 bg-white border border-slate-200/80 rounded-xl flex items-center justify-between shadow-2xs">
                   <div>
-                    <span className="block text-xs font-bold text-slate-800">Publish Live in Page</span>
+                    <span className="block text-xs font-bold text-slate-800">Page Status: Active &amp; Live</span>
                     <span className="text-[11px] text-slate-500">
-                      {editingPage.status === "live" ? "🟢 Currently Active & Live" : "⚪ Draft / Inactive"}
+                      {editingPage.status === "live" ? "🟢 Page is Active & Live at /p/" + editingPage.slug : "⚪ Draft / Inactive (Closed)"}
                     </span>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
@@ -1728,13 +1826,18 @@ export default function PagesManagementPage() {
               </div>
             </div>
 
-            {/* 2. Public Directory & Hub Live Options (Moved inside Edit Modal) */}
-            <div className="p-4 bg-blue-50/60 border border-blue-200 rounded-2xl space-y-3.5">
+            {/* 2. Web Page Live Visibility & Public View Options */}
+            <div className="p-4 bg-gradient-to-br from-blue-50/80 via-white to-indigo-50/50 border-2 border-blue-200 rounded-2xl space-y-4 shadow-sm">
               <div className="flex items-center justify-between">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-[#00215C] flex items-center gap-1.5">
-                  <Globe className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Public Directory &amp; Website Hub Live Options</span>
-                </h4>
+                <div>
+                  <h4 className="text-sm font-black text-[#00215C] flex items-center gap-2">
+                    <Globe className="w-4 h-4 text-blue-600" />
+                    <span>Web Page Visibility (Public View)</span>
+                  </h4>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Only pages marked <strong>Live</strong> and enabled for <strong>Public View</strong> will appear on the Web Page (<code className="text-blue-700 font-mono">/</code>).
+                  </p>
+                </div>
                 <div className="flex items-center gap-2">
                   <a
                     href="/"
@@ -1742,7 +1845,7 @@ export default function PagesManagementPage() {
                     rel="noreferrer"
                     className="text-[11px] font-bold text-blue-700 hover:text-blue-900 bg-white px-2.5 py-1 rounded-lg border border-blue-200 shadow-2xs inline-flex items-center gap-1"
                   >
-                    <span>TerraTern</span>
+                    <span>View Web Page</span>
                     <ExternalLink className="w-3 h-3" />
                   </a>
                   <button
@@ -1756,26 +1859,76 @@ export default function PagesManagementPage() {
                 </div>
               </div>
 
-              {/* Toggles */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
-                <label className="p-3 bg-white border border-blue-200/70 rounded-xl flex items-center gap-2.5 cursor-pointer shadow-2xs hover:border-blue-300 transition">
-                  <input
-                    type="checkbox"
-                    checked={editingPage.config?.show_in_directory !== false}
-                    onChange={(e) =>
+              {/* Real-Time Live Status Banner */}
+              <div className={`p-3 rounded-xl border text-xs flex items-center justify-between ${
+                editingPage.status === "live" && editingPage.config?.show_in_directory !== false
+                  ? "bg-emerald-50 border-emerald-200 text-emerald-900"
+                  : editingPage.status !== "live"
+                  ? "bg-amber-50 border-amber-200 text-amber-900"
+                  : "bg-slate-50 border-slate-200 text-slate-600"
+              }`}>
+                <div className="flex items-center gap-2 font-semibold">
+                  <span className={`w-2.5 h-2.5 rounded-full ${
+                    editingPage.status === "live" && editingPage.config?.show_in_directory !== false
+                      ? "bg-emerald-500 animate-pulse"
+                      : editingPage.status !== "live"
+                      ? "bg-amber-500"
+                      : "bg-slate-400"
+                  }`} />
+                  <span>
+                    {editingPage.status === "live" && editingPage.config?.show_in_directory !== false
+                      ? "Page is LIVE and visible to the public on the Web Page (/)"
+                      : editingPage.status !== "live"
+                      ? `Page is HIDDEN: Status is "${editingPage.status}". Must be set to 'Live' to appear on Web Page.`
+                      : "Page is HIDDEN: Public view in Web Page is currently disabled."}
+                  </span>
+                </div>
+                {editingPage.status !== "live" && (
+                  <button
+                    type="button"
+                    onClick={() =>
                       setEditingPage({
                         ...editingPage,
+                        status: "live",
                         config: {
                           ...(editingPage.config || {}),
-                          show_in_directory: e.target.checked,
+                          show_in_directory: true,
                         },
                       })
                     }
+                    className="px-2.5 py-1 text-[11px] font-bold bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition shrink-0 ml-2 shadow-2xs"
+                  >
+                    Make Live in Web Page Now
+                  </button>
+                )}
+              </div>
+
+              {/* Toggles */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                <label className={`p-3 bg-white border-2 rounded-xl flex items-center gap-3 cursor-pointer shadow-2xs transition ${
+                  editingPage.config?.show_in_directory !== false
+                    ? "border-blue-500 ring-2 ring-blue-100 bg-blue-50/20"
+                    : "border-slate-200 hover:border-slate-300"
+                }`}>
+                  <input
+                    type="checkbox"
+                    checked={editingPage.config?.show_in_directory !== false}
+                    onChange={(e) => {
+                      const willBeShown = e.target.checked;
+                      setEditingPage({
+                        ...editingPage,
+                        status: willBeShown && editingPage.status !== "live" ? "live" : editingPage.status,
+                        config: {
+                          ...(editingPage.config || {}),
+                          show_in_directory: willBeShown,
+                        },
+                      });
+                    }}
                     className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
                   />
                   <div>
-                    <span className="block text-xs font-bold text-slate-800">Show on Public Hub</span>
-                    <span className="text-[10px] text-slate-500">List in directory grid</span>
+                    <span className="block text-xs font-bold text-slate-900">Live in Web Page</span>
+                    <span className="text-[10px] text-slate-500">Public view on / directory</span>
                   </div>
                 </label>
 
