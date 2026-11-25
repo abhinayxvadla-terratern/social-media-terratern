@@ -42,6 +42,7 @@ export default function TractionAnalyticsPage() {
   const [pages, setPages] = useState<Page[]>([]);
   const [rawLeads, setRawLeads] = useState<Lead[]>([]);
   const [rawEvents, setRawEvents] = useState<any[]>([]);
+  const [pageStats, setPageStats] = useState<PageStat[]>([]);
   const [hubTraffic, setHubTraffic] = useState<{ views: number; form_clicks: number }>({ views: 0, form_clicks: 0 });
 
   const [loading, setLoading] = useState(true);
@@ -60,19 +61,22 @@ export default function TractionAnalyticsPage() {
       setLoading(true);
       setError(null);
 
-      // Concurrently query pages, leads, events, and live traffic
-      const [pagesRes, leadsRes, eventsRes] = await Promise.all([
+      // Concurrently query pages, leads, events, stats, and live traffic
+      const [pagesRes, leadsRes, eventsRes, statsRes] = await Promise.all([
         supabase
           .from("pages")
-          .select("id, name, slug, config, status")
-          .order("name", { ascending: true }),
+          .select("*")
+          .order("created_at", { ascending: false }),
         supabase
           .from("leads")
-          .select("id, name, email, phone_e164, source, keyword, page_id, utm, is_partial, created_at, page:pages(id, name, slug)")
+          .select("*, page:pages(id, name, slug)")
           .order("created_at", { ascending: false }),
         supabase
           .from("events")
           .select("id, page_id, type, created_at"),
+        supabase
+          .from("page_stats")
+          .select("*"),
       ]);
 
       let liveWebTraffic = { views: 0, form_clicks: 0 };
@@ -92,6 +96,7 @@ export default function TractionAnalyticsPage() {
       const allPagesList = (pagesRes.data as Page[]) || [];
       const allLeadsList = (leadsRes.data as unknown as Lead[]) || [];
       const allEventsList = (eventsRes.data as any[]) || [];
+      const allStatsList = (statsRes.data as PageStat[]) || [];
 
       // Helper to identify leads originating from Web Page
       const isLeadFromHub = (l: any) =>
@@ -104,6 +109,7 @@ export default function TractionAnalyticsPage() {
         (l.source || "").toLowerCase() === "website_hub";
 
       const hubLeadsCount = allLeadsList.filter(isLeadFromHub).length;
+      const hubStat = allStatsList.find((s) => s.page_id === "page_frontend_hub" || s.page_id === "public_hub");
 
       const manualHubViews = typeof window !== "undefined" ? localStorage.getItem("tt_hub_manual_views") : null;
       const storedHubViews = typeof window !== "undefined" ? Number(localStorage.getItem("tt_hub_traffic") || 0) : 0;
@@ -111,9 +117,9 @@ export default function TractionAnalyticsPage() {
 
       const finalHubViews = manualHubViews !== null && manualHubViews !== "" && !isNaN(Number(manualHubViews))
         ? Number(manualHubViews)
-        : Math.max(liveWebTraffic.views, storedHubViews, 0);
+        : Math.max(hubStat?.views ?? 0, liveWebTraffic.views, storedHubViews, 0);
 
-      const finalHubClicks = Math.max(liveWebTraffic.form_clicks, storedHubClicks, hubLeadsCount);
+      const finalHubClicks = Math.max(hubStat?.starts ?? 0, liveWebTraffic.form_clicks, storedHubClicks, hubLeadsCount);
 
       const hubPageBrief: Page = {
         id: "page_frontend_hub",
@@ -135,13 +141,14 @@ export default function TractionAnalyticsPage() {
         views_count: finalHubViews,
         leads_count: hubLeadsCount,
         conversion_percentage: finalHubViews > 0 ? Number(((hubLeadsCount / finalHubViews) * 100).toFixed(1)) : (hubLeadsCount > 0 ? 100 : 0),
-        config: { form_clicks: finalHubClicks },
+        config: { form_clicks: finalHubClicks, views_count: finalHubViews },
       };
 
       const fullPages = [hubPageBrief, ...allPagesList];
       setPages(fullPages);
       setRawLeads(allLeadsList);
       setRawEvents(allEventsList);
+      setPageStats(allStatsList);
       setHubTraffic({ views: finalHubViews, form_clicks: finalHubClicks });
     } catch (err: any) {
       console.error("Error fetching traction analytics:", err);
@@ -398,24 +405,33 @@ export default function TractionAnalyticsPage() {
 
     let viewsFromStats = 0;
     let startsFromStats = 0;
+    let downloadsFromStats = 0;
+
+    const hubPageObj = pages.find((p) => p.id === "page_frontend_hub");
 
     if (selectedPageId === "page_frontend_hub") {
-      viewsFromStats = hubTraffic.views;
-      startsFromStats = hubTraffic.form_clicks;
+      viewsFromStats = hubPageObj?.views_count || hubTraffic.views || 0;
+      startsFromStats = (hubPageObj?.config as any)?.form_clicks || hubTraffic.form_clicks || 0;
     } else {
       pages.forEach((p) => {
         if (p.id === "page_frontend_hub") return;
         if (selectedPageId !== "all" && p.id !== selectedPageId) return;
         if (selectedPageId === "all" && p.status !== "live") return;
 
+        const stat = pageStats.find((s) => s.page_id === p.id);
         const configViews = Number(p.config?.views_count ?? p.config?.manual_views ?? 0);
-        viewsFromStats += configViews;
-        startsFromStats += Number((p.config as any)?.form_clicks ?? 0);
+        const pViews = configViews > 0 ? configViews : (stat?.views || 0);
+        const pStarts = Number((p.config as any)?.form_clicks ?? stat?.starts ?? 0);
+        const pDownloads = Number(stat?.downloads || 0);
+
+        viewsFromStats += pViews;
+        startsFromStats += pStarts;
+        downloadsFromStats += pDownloads;
       });
 
-      if (selectedPageId === "all") {
-        viewsFromStats += hubTraffic.views;
-        startsFromStats += hubTraffic.form_clicks;
+      if (selectedPageId === "all" && hubPageObj) {
+        viewsFromStats += hubPageObj.views_count || hubTraffic.views || 0;
+        startsFromStats += (hubPageObj.config as any)?.form_clicks || hubTraffic.form_clicks || 0;
       }
     }
 
@@ -423,7 +439,7 @@ export default function TractionAnalyticsPage() {
     if (selectedPageId === "page_frontend_hub") {
       totalViews = Math.max(viewsFromStats, totalLeads);
     } else if (isDateRestricted) {
-      const hubViewsToAdd = (selectedPageId === "all" && isTodayIncluded) ? hubTraffic.views : 0;
+      const hubViewsToAdd = (selectedPageId === "all" && hubPageObj) ? (hubPageObj.views_count || hubTraffic.views || 0) : 0;
       totalViews = Math.max(viewsFromEvents + hubViewsToAdd, totalLeads);
     } else if (isSourceRestricted) {
       totalViews = Math.max(viewsFromEvents, Math.round(viewsFromStats * sourceRatio), totalLeads);
@@ -435,7 +451,7 @@ export default function TractionAnalyticsPage() {
     if (selectedPageId === "page_frontend_hub") {
       totalStarts = Math.max(startsFromStats, totalLeads);
     } else if (isDateRestricted) {
-      const hubStartsToAdd = (selectedPageId === "all" && isTodayIncluded) ? hubTraffic.form_clicks : 0;
+      const hubStartsToAdd = (selectedPageId === "all" && hubPageObj) ? ((hubPageObj.config as any)?.form_clicks || hubTraffic.form_clicks || 0) : 0;
       totalStarts = Math.max(startsFromEvents + hubStartsToAdd, totalLeads);
     } else if (isSourceRestricted) {
       totalStarts = Math.max(startsFromEvents, Math.round(startsFromStats * sourceRatio), totalLeads);
@@ -466,7 +482,7 @@ export default function TractionAnalyticsPage() {
       activePagesCount,
       filteredLeads,
     };
-  }, [rawLeads, rawEvents, pages, hubTraffic, selectedPageId, selectedSource, timeRange, startDate, endDate, leadStatus, activePageIds]);
+  }, [rawLeads, rawEvents, pages, pageStats, hubTraffic, selectedPageId, selectedSource, timeRange, startDate, endDate, leadStatus, activePageIds]);
 
   // Compute daily trends dynamically from events and leads
   const filteredTrends = useMemo(() => {
