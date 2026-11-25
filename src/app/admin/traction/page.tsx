@@ -26,8 +26,14 @@ import {
   ArrowDown,
   Globe,
   Tag,
+  Users,
+  Eye,
+  Flame,
+  ChevronDown,
+  RotateCcw,
 } from "lucide-react";
 import { getCachedData, setCachedData } from "@/lib/client-cache";
+import { cleanPageName } from "@/lib/vibe-engine";
 
 export default function TractionAnalyticsPage() {
   const { userRole } = useAdmin();
@@ -41,11 +47,13 @@ export default function TractionAnalyticsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Filters
-  const [dateRange, setDateRange] = useState<"all" | "today" | "7d" | "30d" | "custom">("all");
-  const [customStart, setCustomStart] = useState<string>("");
-  const [customEnd, setCustomEnd] = useState<string>("");
+  // Filters (Synchronized with Overview top filters)
   const [selectedPageId, setSelectedPageId] = useState<string>("all");
+  const [selectedSource, setSelectedSource] = useState<string>("all");
+  const [timeRange, setTimeRange] = useState<"all" | "today" | "7d" | "30d" | "this_month" | "custom">("all");
+  const [startDate, setStartDate] = useState<string>("");
+  const [endDate, setEndDate] = useState<string>("");
+  const [leadStatus, setLeadStatus] = useState<"all" | "complete" | "partial">("all");
 
   const fetchTractionData = async () => {
     try {
@@ -156,6 +164,92 @@ export default function TractionAnalyticsPage() {
     l.page?.slug === "public-hub" ||
     (l.source || "").toLowerCase() === "website_hub";
 
+  function getChannelInfo(source: string | null | undefined): { label: string; color: string; dotColor: string } {
+    const s = (source || "").toLowerCase().trim();
+    if (!s || s === "direct" || s === "direct / organic" || s === "none" || s === "null") {
+      return {
+        label: "Direct / Organic",
+        color: "bg-slate-700",
+        dotColor: "bg-slate-500",
+      };
+    }
+    if (s.includes("ig") || s.includes("instagram")) {
+      if (s.includes("dm")) {
+        return {
+          label: "Instagram DM",
+          color: "bg-gradient-to-r from-purple-500 to-pink-500",
+          dotColor: "bg-pink-500",
+        };
+      }
+      if (s.includes("bio")) {
+        return {
+          label: "Instagram Bio",
+          color: "bg-pink-500",
+          dotColor: "bg-pink-500",
+        };
+      }
+      return {
+        label: "Instagram",
+        color: "bg-gradient-to-r from-purple-500 to-pink-500",
+        dotColor: "bg-pink-500",
+      };
+    }
+    if (s.includes("wa") || s.includes("whatsapp")) {
+      return {
+        label: "WhatsApp Direct",
+        color: "bg-emerald-500",
+        dotColor: "bg-emerald-500",
+      };
+    }
+    if (s.includes("fb") || s.includes("facebook")) {
+      return {
+        label: "Facebook Ads",
+        color: "bg-blue-600",
+        dotColor: "bg-blue-600",
+      };
+    }
+    if (s.includes("linkedin")) {
+      return {
+        label: "LinkedIn",
+        color: "bg-sky-600",
+        dotColor: "bg-sky-600",
+      };
+    }
+    if (s.includes("youtube") || s.includes("yt")) {
+      return {
+        label: "YouTube",
+        color: "bg-red-600",
+        dotColor: "bg-red-600",
+      };
+    }
+    if (s.includes("google")) {
+      return {
+        label: "Google Search / Ads",
+        color: "bg-amber-500",
+        dotColor: "bg-amber-500",
+      };
+    }
+    if (s.includes("email") || s.includes("newsletter")) {
+      return {
+        label: "Email Campaign",
+        color: "bg-indigo-600",
+        dotColor: "bg-indigo-600",
+      };
+    }
+    if (s.includes("manychat") || s.includes("auto_connector") || s.includes("connector")) {
+      return {
+        label: "ManyChat Automation",
+        color: "bg-purple-600",
+        dotColor: "bg-purple-500",
+      };
+    }
+    return {
+      label: (source || "Direct").charAt(0).toUpperCase() + (source || "Direct").slice(1),
+      color: "bg-slate-800",
+      dotColor: "bg-slate-400",
+    };
+  }
+
   const activePages = useMemo(() => {
     return pages.filter((p) => p.status === "live");
   }, [pages]);
@@ -174,6 +268,17 @@ export default function TractionAnalyticsPage() {
     return !pageId || activePageIds.has(pageId) || (lead && isLeadFromHub(lead));
   };
 
+  const activeSources = useMemo(() => {
+    const sourcesSet = new Set<string>();
+    rawLeads.forEach((lead) => {
+      if (matchesPage(lead.page_id, lead)) {
+        const info = getChannelInfo(lead.source);
+        if (info.label) sourcesSet.add(info.label);
+      }
+    });
+    return Array.from(sourcesSet).sort();
+  }, [rawLeads, activePageIds, selectedPageId]);
+
   const getLocalDateString = (iso: string) => {
     try {
       const d = new Date(iso);
@@ -188,12 +293,12 @@ export default function TractionAnalyticsPage() {
   };
 
   const matchesDate = (isoStr: string) => {
-    if (!isoStr || dateRange === "all") return true;
+    if (!isoStr || timeRange === "all") return true;
     const itemDate = new Date(isoStr);
     if (isNaN(itemDate.getTime())) return true;
 
     const now = new Date();
-    if (dateRange === "today") {
+    if (timeRange === "today") {
       const isCalendarToday =
         itemDate.getFullYear() === now.getFullYear() &&
         itemDate.getMonth() === now.getMonth() &&
@@ -203,27 +308,165 @@ export default function TractionAnalyticsPage() {
         itemDate.getTime() <= now.getTime();
       return isCalendarToday || isLast24h;
     }
-    if (dateRange === "7d") {
+    if (timeRange === "7d") {
       const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
       return itemDate >= sevenDaysAgo;
     }
-    if (dateRange === "30d") {
+    if (timeRange === "30d") {
       const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
       return itemDate >= thirtyDaysAgo;
     }
-    if (dateRange === "custom") {
-      if (customStart) {
-        const start = new Date(`${customStart}T00:00:00`);
+    if (timeRange === "this_month") {
+      return (
+        itemDate.getFullYear() === now.getFullYear() &&
+        itemDate.getMonth() === now.getMonth()
+      );
+    }
+    if (timeRange === "custom") {
+      if (startDate) {
+        const start = new Date(`${startDate}T00:00:00`);
         if (!isNaN(start.getTime()) && itemDate < start) return false;
       }
-      if (customEnd) {
-        const end = new Date(`${customEnd}T23:59:59.999`);
+      if (endDate) {
+        const end = new Date(`${endDate}T23:59:59.999`);
         if (!isNaN(end.getTime()) && itemDate > end) return false;
       }
       return true;
     }
     return true;
   };
+
+  const isFiltered =
+    selectedPageId !== "all" ||
+    selectedSource !== "all" ||
+    timeRange !== "all" ||
+    leadStatus !== "all" ||
+    Boolean(startDate || endDate);
+
+  const handleResetFilters = () => {
+    setSelectedPageId("all");
+    setSelectedSource("all");
+    setTimeRange("all");
+    setStartDate("");
+    setEndDate("");
+    setLeadStatus("all");
+  };
+
+  // Compute 4 Executive Metric Cards (Exact match with Overview)
+  const computedData = useMemo(() => {
+    // 1. Filter Leads
+    const filteredLeads = rawLeads.filter((lead) => {
+      if (!matchesDate(lead.created_at)) return false;
+      if (!matchesPage(lead.page_id, lead)) return false;
+
+      if (selectedSource !== "all") {
+        const info = getChannelInfo(lead.source);
+        if (info.label !== selectedSource) return false;
+      }
+
+      if (leadStatus === "complete" && lead.is_partial) return false;
+      if (leadStatus === "partial" && !lead.is_partial) return false;
+
+      return true;
+    });
+
+    const totalLeads = filteredLeads.length;
+    const completeLeads = filteredLeads.filter((l) => !l.is_partial).length;
+    const partialLeads = filteredLeads.filter((l) => l.is_partial).length;
+    const activeLeads = leadStatus === "complete" ? completeLeads : leadStatus === "partial" ? partialLeads : totalLeads;
+
+    // 2. Filter Events
+    let viewsFromEvents = 0;
+    let startsFromEvents = 0;
+    let downloadsFromEvents = 0;
+
+    rawEvents.forEach((ev) => {
+      if (!matchesPage(ev.page_id)) return;
+      if (!matchesDate(ev.created_at)) return;
+      if (ev.type === "view") viewsFromEvents++;
+      else if (ev.type === "start") startsFromEvents++;
+      else if (ev.type === "download") downloadsFromEvents++;
+    });
+
+    const isDateRestricted = timeRange !== "all" && (timeRange !== "custom" || Boolean(startDate || endDate));
+    const isSourceRestricted = selectedSource !== "all";
+    const isTodayIncluded = matchesDate(new Date().toISOString());
+
+    const sourceRatio = isSourceRestricted && rawLeads.length > 0
+      ? Math.max(0.05, totalLeads / rawLeads.length)
+      : 1;
+
+    let viewsFromStats = 0;
+    let startsFromStats = 0;
+
+    if (selectedPageId === "page_frontend_hub") {
+      viewsFromStats = hubTraffic.views;
+      startsFromStats = hubTraffic.form_clicks;
+    } else {
+      pages.forEach((p) => {
+        if (p.id === "page_frontend_hub") return;
+        if (selectedPageId !== "all" && p.id !== selectedPageId) return;
+        if (selectedPageId === "all" && p.status !== "live") return;
+
+        const configViews = Number(p.config?.views_count ?? p.config?.manual_views ?? 0);
+        viewsFromStats += configViews;
+        startsFromStats += Number((p.config as any)?.form_clicks ?? 0);
+      });
+
+      if (selectedPageId === "all") {
+        viewsFromStats += hubTraffic.views;
+        startsFromStats += hubTraffic.form_clicks;
+      }
+    }
+
+    let totalViews = 0;
+    if (selectedPageId === "page_frontend_hub") {
+      totalViews = Math.max(viewsFromStats, totalLeads);
+    } else if (isDateRestricted) {
+      const hubViewsToAdd = (selectedPageId === "all" && isTodayIncluded) ? hubTraffic.views : 0;
+      totalViews = Math.max(viewsFromEvents + hubViewsToAdd, totalLeads);
+    } else if (isSourceRestricted) {
+      totalViews = Math.max(viewsFromEvents, Math.round(viewsFromStats * sourceRatio), totalLeads);
+    } else {
+      totalViews = Math.max(viewsFromStats, viewsFromEvents, totalLeads);
+    }
+
+    let totalStarts = 0;
+    if (selectedPageId === "page_frontend_hub") {
+      totalStarts = Math.max(startsFromStats, totalLeads);
+    } else if (isDateRestricted) {
+      const hubStartsToAdd = (selectedPageId === "all" && isTodayIncluded) ? hubTraffic.form_clicks : 0;
+      totalStarts = Math.max(startsFromEvents + hubStartsToAdd, totalLeads);
+    } else if (isSourceRestricted) {
+      totalStarts = Math.max(startsFromEvents, Math.round(startsFromStats * sourceRatio), totalLeads);
+    } else {
+      totalStarts = Math.max(startsFromStats, startsFromEvents, totalLeads);
+    }
+
+    const conversionRate = totalViews > 0
+      ? Number(((activeLeads / totalViews) * 100).toFixed(1))
+      : (activeLeads > 0 ? 100 : 0);
+
+    const relevantPages = selectedPageId !== "all"
+      ? pages.filter((p) => p.id === selectedPageId)
+      : activePages;
+
+    const activePagesCount = selectedPageId !== "all"
+      ? relevantPages.filter((p) => p.status === "live").length
+      : relevantPages.filter((p) => p.status === "live").length;
+
+    return {
+      totalLeads,
+      completeLeads,
+      partialLeads,
+      activeLeads,
+      totalViews,
+      totalStarts,
+      conversionRate,
+      activePagesCount,
+      filteredLeads,
+    };
+  }, [rawLeads, rawEvents, pages, hubTraffic, selectedPageId, selectedSource, timeRange, startDate, endDate, leadStatus, activePageIds]);
 
   // Compute daily trends dynamically from events and leads
   const filteredTrends = useMemo(() => {
@@ -277,9 +520,7 @@ export default function TractionAnalyticsPage() {
     });
 
     // 2. Process leads
-    rawLeads.forEach((l) => {
-      if (!matchesPage(l.page_id, l)) return;
-      if (!matchesDate(l.created_at)) return;
+    computedData.filteredLeads.forEach((l) => {
       const date = getLocalDateString(l.created_at);
       const isHub = isLeadFromHub(l);
       const pageId = isHub ? "page_frontend_hub" : (l.page_id || "unknown");
@@ -352,107 +593,12 @@ export default function TractionAnalyticsPage() {
         };
       })
       .sort((a, b) => b.report_date.localeCompare(a.report_date));
-  }, [rawEvents, rawLeads, pages, hubTraffic, selectedPageId, dateRange, customStart, customEnd]);
-
-  // Aggregate totals dynamically for the selected view & date range (unified with Overview)
-  const aggregated = useMemo(() => {
-    // 1. Leads matching page and date
-    const matchedLeads = rawLeads.filter((l) => {
-      if (!matchesPage(l.page_id, l)) return false;
-      return matchesDate(l.created_at);
-    });
-
-    const leads = matchedLeads.length;
-    const completeLeads = matchedLeads.filter((l) => !l.is_partial).length;
-
-    // 2. Events matching page and date
-    let viewsFromEvents = 0;
-    let startsFromEvents = 0;
-    let downloadsFromEvents = 0;
-
-    rawEvents.forEach((ev) => {
-      if (!matchesPage(ev.page_id)) return;
-      if (!matchesDate(ev.created_at)) return;
-      if (ev.type === "view") viewsFromEvents++;
-      else if (ev.type === "start") startsFromEvents++;
-      else if (ev.type === "download") downloadsFromEvents++;
-    });
-
-    const isDateRestricted = dateRange !== "all";
-    const isTodayIncluded = matchesDate(new Date().toISOString());
-
-    // 3. Baseline stats from page configs (work application 229, nursing 19, etc. + web page)
-    let viewsFromStats = 0;
-    let startsFromStats = 0;
-
-    if (selectedPageId === "page_frontend_hub") {
-      viewsFromStats = hubTraffic.views;
-      startsFromStats = hubTraffic.form_clicks;
-    } else {
-      pages.forEach((p) => {
-        if (p.id === "page_frontend_hub") return;
-        if (selectedPageId !== "all" && p.id !== selectedPageId) return;
-        if (selectedPageId === "all" && p.status !== "live") return;
-
-        const configViews = Number(p.config?.views_count ?? p.config?.manual_views ?? 0);
-        viewsFromStats += configViews;
-        startsFromStats += Number((p.config as any)?.form_clicks ?? 0);
-      });
-
-      if (selectedPageId === "all") {
-        viewsFromStats += hubTraffic.views;
-        startsFromStats += hubTraffic.form_clicks;
-      }
-    }
-
-    let views = 0;
-    if (selectedPageId === "page_frontend_hub") {
-      views = isDateRestricted
-        ? (isTodayIncluded ? Math.max(hubTraffic.views, leads) : leads)
-        : Math.max(viewsFromStats, leads);
-    } else if (isDateRestricted) {
-      const hubViewsToAdd = (selectedPageId === "all" && isTodayIncluded) ? hubTraffic.views : 0;
-      views = Math.max(viewsFromEvents + hubViewsToAdd, leads);
-    } else {
-      views = Math.max(viewsFromStats, viewsFromEvents, leads);
-    }
-
-    let starts = 0;
-    if (selectedPageId === "page_frontend_hub") {
-      starts = isDateRestricted
-        ? (isTodayIncluded ? Math.max(hubTraffic.form_clicks, leads) : leads)
-        : Math.max(startsFromStats, leads);
-    } else if (isDateRestricted) {
-      const hubStartsToAdd = (selectedPageId === "all" && isTodayIncluded) ? hubTraffic.form_clicks : 0;
-      starts = Math.max(startsFromEvents + hubStartsToAdd, leads);
-    } else {
-      starts = Math.max(startsFromStats, startsFromEvents, leads);
-    }
-
-    const conversionRate = views > 0
-      ? Number(((leads / views) * 100).toFixed(1))
-      : (leads > 0 ? 100 : 0);
-
-    return {
-      views,
-      starts,
-      submits: leads,
-      downloads: downloadsFromEvents,
-      leads,
-      completeLeads,
-      conversionRate,
-    };
-  }, [rawLeads, rawEvents, pages, hubTraffic, selectedPageId, dateRange, customStart, customEnd, activePageIds]);
+  }, [rawEvents, computedData.filteredLeads, pages, hubTraffic, selectedPageId, timeRange, startDate, endDate]);
 
   // Filter marketing attribution leads by page & date range
   const filteredSources = useMemo(() => {
-    const matchedLeads = rawLeads.filter((l) => {
-      if (!matchesPage(l.page_id, l)) return false;
-      return matchesDate(l.created_at);
-    });
-
     const map = new Map<string, LeadsBySource>();
-    matchedLeads.forEach((l) => {
+    computedData.filteredLeads.forEach((l) => {
       const isHub = isLeadFromHub(l);
       const pageId = isHub ? "page_frontend_hub" : (l.page_id || "unknown");
       const p = pages.find((page) => page.id === pageId);
@@ -492,186 +638,240 @@ export default function TractionAnalyticsPage() {
     });
 
     return Array.from(map.values()).sort((a, b) => b.total_leads - a.total_leads);
-  }, [rawLeads, pages, selectedPageId, dateRange, customStart, customEnd]);
+  }, [computedData.filteredLeads, pages]);
 
   return (
     <div className="space-y-6">
-      {/* 1. Filter & Date Range Bar */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
-        {/* Page Filter */}
-        <div className="flex items-center gap-2">
-          <Filter className="w-4 h-4 text-slate-400 flex-shrink-0" />
-          <select
-            value={selectedPageId}
-            onChange={(e) => setSelectedPageId(e.target.value)}
-            className="w-full sm:w-auto px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-          >
-            <option value="all">All Pages (Aggregate Funnel)</option>
-            {pages.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+      {/* 1. Global Filter Bar (Matches Attached UI) */}
+      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-2xs space-y-4">
+        {/* Filter Title & Reset */}
+        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <Filter className="w-4 h-4 text-blue-600" />
+            <span className="text-xs font-black uppercase tracking-wider text-slate-800">
+              Filters
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            {isFiltered && (
+              <button
+                onClick={handleResetFilters}
+                className="text-xs font-bold text-[#255CC1] hover:underline flex items-center gap-1 active:scale-95 transition"
+                title="Reset filters"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span>Reset</span>
+              </button>
+            )}
+            <button
+              onClick={() => fetchTractionData()}
+              disabled={loading}
+              title="Refresh analytics data"
+              className="text-xs font-bold text-slate-500 hover:text-slate-800 flex items-center gap-1 transition"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-blue-600" : ""}`} />
+              <span className="hidden sm:inline">Refresh</span>
+            </button>
+          </div>
         </div>
 
-        {/* Date Range Selector (Phone-first pills) + Quick Refresh */}
-        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-          {(
-            [
-              { id: "all", label: "All Time" },
-              { id: "today", label: "Today" },
-              { id: "7d", label: "7 Days" },
-              { id: "30d", label: "30 Days" },
-              { id: "custom", label: "Custom" },
-            ] as const
-          ).map((item) => (
-            <button
-              key={item.id}
-              onClick={() => {
-                setDateRange(item.id);
-                if (item.id !== "custom") {
-                  setCustomStart("");
-                  setCustomEnd("");
-                }
-              }}
-              className={`touch-target px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                dateRange === item.id
-                  ? "bg-blue-600 text-white shadow-sm shadow-blue-600/30"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
-            >
-              {item.label}
-            </button>
-          ))}
+        {/* 4 Filters Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-start">
+          {/* Campaign Filter */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+              Campaign
+            </label>
+            <div className="relative">
+              <select
+                value={selectedPageId}
+                onChange={(e) => setSelectedPageId(e.target.value)}
+                className="w-full text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 pr-8 focus:outline-none focus:ring-1 focus:ring-[#255CC1] cursor-pointer appearance-none transition"
+              >
+                <option value="all">All Pages ({activePages.length})</option>
+                {activePages.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {cleanPageName(p.name)}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 pointer-events-none absolute right-2.5 top-2.5" />
+            </div>
+          </div>
 
-          <button
-            onClick={() => fetchTractionData()}
-            disabled={loading}
-            title="Refresh analytics data"
-            className="touch-target p-2 rounded-xl text-xs font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all flex items-center justify-center disabled:opacity-50 ml-1"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-blue-600" : ""}`} />
-          </button>
+          {/* Source Filter */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+              Source
+            </label>
+            <div className="relative">
+              <select
+                value={selectedSource}
+                onChange={(e) => setSelectedSource(e.target.value)}
+                className="w-full text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 pr-8 focus:outline-none focus:ring-1 focus:ring-[#255CC1] cursor-pointer appearance-none transition"
+              >
+                <option value="all">All Sources ({activeSources.length})</option>
+                {activeSources.map((src) => (
+                  <option key={src} value={src}>
+                    {src}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 pointer-events-none absolute right-2.5 top-2.5" />
+            </div>
+          </div>
+
+          {/* Date Range Filter */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+              Date Range
+            </label>
+            <div className="relative">
+              <select
+                value={timeRange}
+                onChange={(e) => {
+                  const val = e.target.value as any;
+                  setTimeRange(val);
+                  if (val !== "custom") {
+                    setStartDate("");
+                    setEndDate("");
+                  }
+                }}
+                className="w-full text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 pr-8 focus:outline-none focus:ring-1 focus:ring-[#255CC1] cursor-pointer appearance-none transition"
+              >
+                <option value="all">All Time</option>
+                <option value="today">Today</option>
+                <option value="7d">Last 7 Days</option>
+                <option value="30d">Last 30 Days</option>
+                <option value="this_month">This Month</option>
+                <option value="custom">Custom Range (From / To)</option>
+              </select>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 pointer-events-none absolute right-2.5 top-2.5" />
+            </div>
+
+            {timeRange === "custom" && (
+              <div className="pt-2 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 w-10 shrink-0">
+                    From
+                  </span>
+                  <input
+                    type="date"
+                    value={startDate}
+                    max={endDate || undefined}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="w-full text-xs font-medium text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#255CC1] transition"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 w-10 shrink-0">
+                    To
+                  </span>
+                  <input
+                    type="date"
+                    value={endDate}
+                    min={startDate || undefined}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="w-full text-xs font-medium text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-[#255CC1] transition"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Lead Status Filter */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+              Lead Status
+            </label>
+            <div className="relative">
+              <select
+                value={leadStatus}
+                onChange={(e) => setLeadStatus(e.target.value as any)}
+                className="w-full text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl px-3 py-2 pr-8 focus:outline-none focus:ring-1 focus:ring-[#255CC1] cursor-pointer appearance-none transition"
+              >
+                <option value="all">All Leads</option>
+                <option value="complete">Complete</option>
+                <option value="partial">Partial</option>
+              </select>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 pointer-events-none absolute right-2.5 top-2.5" />
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Custom Date Inputs if selected */}
-      {dateRange === "custom" && (
-        <div className="p-3 bg-blue-50/60 border border-blue-200 rounded-xl flex flex-wrap items-center gap-3 text-xs animate-in fade-in">
-          <Calendar className="w-4 h-4 text-blue-600" />
-          <span className="font-semibold text-blue-900">Custom Range:</span>
-          <div className="flex items-center gap-1.5">
-            <span className="text-slate-500 text-[11px]">From</span>
-            <input
-              type="date"
-              value={customStart}
-              max={customEnd || undefined}
-              onChange={(e) => setCustomStart(e.target.value)}
-              className="px-2.5 py-1.5 bg-white border border-blue-200 rounded-lg text-xs"
-            />
+      {/* 2. Top Executive KPI Cards (4 Metric Cards - Exact replica of attached UI) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        {/* Card 1: Total Leads */}
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-2xs space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              Total Leads
+            </span>
+            <div className="w-8 h-8 rounded-xl bg-blue-50 text-[#255CC1] flex items-center justify-center">
+              <Users className="w-4 h-4" />
+            </div>
           </div>
-          <div className="flex items-center gap-1.5">
-            <span className="text-slate-500 text-[11px]">To</span>
-            <input
-              type="date"
-              value={customEnd}
-              min={customStart || undefined}
-              onChange={(e) => setCustomEnd(e.target.value)}
-              className="px-2.5 py-1.5 bg-white border border-blue-200 rounded-lg text-xs"
-            />
+          <div className="text-2xl sm:text-3xl font-black text-[#00215C]">
+            {loading ? "—" : formatNumber(computedData.activeLeads)}
           </div>
-          {(customStart || customEnd) && (
-            <button
-              onClick={() => {
-                setCustomStart("");
-                setCustomEnd("");
-              }}
-              className="text-[11px] font-semibold text-blue-600 hover:underline ml-2"
-            >
-              Clear
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Visual Funnel Progression */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="font-extrabold text-sm sm:text-base text-slate-900 flex items-center gap-2">
-            <TrendingUp className="w-4 h-4 text-blue-600" />
-            <span>Funnel Progression</span>
-          </h3>
-          <span className="text-xs text-slate-400 font-medium">Step-by-step conversion pipeline</span>
+          <p className="text-[11px] text-slate-500 font-medium">
+            {computedData.completeLeads} complete &bull; {computedData.partialLeads} partial
+          </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-          {/* Step 1: Views */}
-          <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl space-y-2">
-            <div className="flex items-center justify-between text-xs font-semibold">
-              <span className="text-slate-600">1. Page Views</span>
-              <span className="text-slate-900 font-bold font-mono">100%</span>
+        {/* Card 2: Conversion Rate */}
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-2xs space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              Conversion Rate
+            </span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+              <TrendingUp className="w-4 h-4" />
             </div>
-            <div className="text-2xl font-black text-slate-900 font-mono">
-              {formatNumber(aggregated.views)}
-            </div>
-            <div className="h-2.5 bg-slate-200 rounded-full overflow-hidden">
-              <div className="h-full bg-slate-500 rounded-full w-full" />
-            </div>
-            <p className="text-[11px] text-slate-400">Total funnel traffic</p>
           </div>
+          <div className="text-2xl sm:text-3xl font-black text-emerald-600">
+            {loading ? "—" : formatPercentage(computedData.conversionRate)}
+          </div>
+          <p className="text-[11px] text-slate-500 font-medium">
+            Visitors converted into applicants
+          </p>
+        </div>
 
-          {/* Step 2: Engaged Starts */}
-          <div className="p-4 bg-blue-50/60 border border-blue-100 rounded-xl space-y-2">
-            <div className="flex items-center justify-between text-xs font-semibold">
-              <span className="text-blue-900">2. Engaged Visitors</span>
-              <span className="text-blue-700 font-bold font-mono">
-                {aggregated.views > 0
-                  ? Math.round((aggregated.starts / aggregated.views) * 100)
-                  : 0}%
-              </span>
+        {/* Card 3: Total Traffic */}
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-2xs space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              Total Traffic
+            </span>
+            <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+              <Eye className="w-4 h-4" />
             </div>
-            <div className="text-2xl font-black text-blue-700 font-mono">
-              {formatNumber(aggregated.starts)}
-            </div>
-            <div className="h-2.5 bg-blue-100 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-blue-600 rounded-full transition-all duration-500"
-                style={{
-                  width: `${
-                    aggregated.views > 0
-                      ? Math.min(100, Math.round((aggregated.starts / aggregated.views) * 100))
-                      : 0
-                  }%`,
-                }}
-              />
-            </div>
-            <p className="text-[11px] text-blue-600/80">Started questionnaire / calculation</p>
           </div>
+          <div className="text-2xl sm:text-3xl font-black text-[#00215C]">
+            {loading ? "—" : formatNumber(computedData.totalViews)}
+          </div>
+          <p className="text-[11px] text-slate-500 font-medium">
+            {computedData.totalStarts} assessments started
+          </p>
+        </div>
 
-          {/* Step 3: Captured Leads */}
-          <div className="p-4 bg-emerald-50/60 border border-emerald-100 rounded-xl space-y-2">
-            <div className="flex items-center justify-between text-xs font-semibold">
-              <span className="text-emerald-900">3. Leads Captured</span>
-              <span className="text-emerald-700 font-bold font-mono">
-                {formatPercentage(aggregated.conversionRate)}
-              </span>
+        {/* Card 4: Active Campaigns */}
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-2xs space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              Active Campaigns
+            </span>
+            <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+              <Flame className="w-4 h-4" />
             </div>
-            <div className="text-2xl font-black text-emerald-700 font-mono">
-              {formatNumber(aggregated.leads)}
-            </div>
-            <div className="h-2.5 bg-emerald-100 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-emerald-600 rounded-full transition-all duration-500"
-                style={{
-                  width: `${Math.min(100, Math.round(aggregated.conversionRate))}%`,
-                }}
-              />
-            </div>
-            <p className="text-[11px] text-emerald-600/80">
-              {aggregated.completeLeads} full submissions
-            </p>
           </div>
+          <div className="text-2xl sm:text-3xl font-black text-[#00215C]">
+            {loading ? "—" : computedData.activePagesCount}
+          </div>
+          <p className="text-[11px] text-slate-500 font-medium">
+            Out of {pages.length} total pages
+          </p>
         </div>
       </div>
 

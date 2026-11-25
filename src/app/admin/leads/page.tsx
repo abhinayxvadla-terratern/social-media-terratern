@@ -367,6 +367,32 @@ export default function LeadsManagementPage() {
     ) as string[];
   }, [leads]);
 
+  // Dynamically derive only form types that are actually present among existing leads
+  const availableFormTypes = useMemo(() => {
+    const map = new Map<string, { key: string; label: string; count: number }>();
+    leads.forEach((l) => {
+      const tag = getLeadFormTag(l);
+      if (!tag.formKey) return;
+      const existing = map.get(tag.formKey);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        map.set(tag.formKey, {
+          key: tag.formKey,
+          label: tag.title,
+          count: 1,
+        });
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => b.count - a.count);
+  }, [leads]);
+
+  useEffect(() => {
+    if (selectedFormType !== "all" && !availableFormTypes.some((ft) => ft.key === selectedFormType)) {
+      setSelectedFormType("all");
+    }
+  }, [availableFormTypes, selectedFormType]);
+
   // Apply filters
   const filteredLeads = useMemo(() => {
     return leads.filter((lead) => {
@@ -607,20 +633,21 @@ export default function LeadsManagementPage() {
             </select>
           </div>
 
-          {/* Form Type Filter */}
+          {/* Form Type Filter (Dynamically shows only present form types) */}
           <div>
             <select
               value={selectedFormType}
               onChange={(e) => setSelectedFormType(e.target.value)}
               className="w-full px-2.5 py-2 bg-blue-50/60 border border-blue-200 rounded-lg text-xs font-semibold text-blue-800"
             >
-              <option value="all">All Form Types</option>
-              <option value="counselling">1:1 Free Counselling</option>
-              <option value="consultation">1:1 Consultation</option>
-              <option value="strategy_call">Strategy Call</option>
-              <option value="calculator">Calculator Assessment</option>
-              <option value="pdf">PDF Guide Download</option>
-              <option value="callback">Quick Callback</option>
+              <option value="all">
+                All Form Types{availableFormTypes.length > 0 ? ` (${leads.length})` : ""}
+              </option>
+              {availableFormTypes.map((ft) => (
+                <option key={ft.key} value={ft.key}>
+                  {ft.label} ({ft.count})
+                </option>
+              ))}
             </select>
           </div>
 
