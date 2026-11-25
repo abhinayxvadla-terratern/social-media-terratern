@@ -156,12 +156,22 @@ export default function TractionAnalyticsPage() {
     l.page?.slug === "public-hub" ||
     (l.source || "").toLowerCase() === "website_hub";
 
+  const activePages = useMemo(() => {
+    return pages.filter((p) => p.status === "live");
+  }, [pages]);
+
+  const activePageIds = useMemo(() => {
+    return new Set(activePages.map((p) => p.id));
+  }, [activePages]);
+
   const matchesPage = (pageId: string | null | undefined, lead?: any) => {
-    if (selectedPageId === "all") return true;
-    if (selectedPageId === "page_frontend_hub") {
-      return pageId === "page_frontend_hub" || pageId === "public_hub" || (lead && isLeadFromHub(lead));
+    if (selectedPageId !== "all") {
+      if (selectedPageId === "page_frontend_hub") {
+        return pageId === "page_frontend_hub" || pageId === "public_hub" || (lead && isLeadFromHub(lead));
+      }
+      return pageId === selectedPageId;
     }
-    return pageId === selectedPageId;
+    return !pageId || activePageIds.has(pageId) || (lead && isLeadFromHub(lead));
   };
 
   const getLocalDateString = (iso: string) => {
@@ -344,79 +354,95 @@ export default function TractionAnalyticsPage() {
       .sort((a, b) => b.report_date.localeCompare(a.report_date));
   }, [rawEvents, rawLeads, pages, hubTraffic, selectedPageId, dateRange, customStart, customEnd]);
 
-  // Aggregate totals dynamically for the selected view & date range
+  // Aggregate totals dynamically for the selected view & date range (unified with Overview)
   const aggregated = useMemo(() => {
-    if (filteredTrends.length > 0) {
-      const views = filteredTrends.reduce((sum, t) => sum + Number(t.views || 0), 0);
-      const starts = filteredTrends.reduce((sum, t) => sum + Number(t.starts || 0), 0);
-      const submits = filteredTrends.reduce((sum, t) => sum + Number(t.submits || 0), 0);
-      const downloads = filteredTrends.reduce((sum, t) => sum + Number(t.downloads || 0), 0);
-      const leads = filteredTrends.reduce((sum, t) => sum + Number(t.leads || 0), 0);
-      const completeLeads = filteredTrends.reduce((sum, t) => sum + Number(t.complete_leads || 0), 0);
-      const conversionRate = views > 0 ? Number(((leads / views) * 100).toFixed(1)) : (leads > 0 ? 100 : 0);
+    // 1. Leads matching page and date
+    const matchedLeads = rawLeads.filter((l) => {
+      if (!matchesPage(l.page_id, l)) return false;
+      return matchesDate(l.created_at);
+    });
 
-      return {
-        views,
-        starts,
-        submits,
-        downloads,
-        leads,
-        completeLeads,
-        conversionRate,
-      };
-    }
+    const leads = matchedLeads.length;
+    const completeLeads = matchedLeads.filter((l) => !l.is_partial).length;
 
-    // Fallback if no activity found in trends
+    // 2. Events matching page and date
+    let viewsFromEvents = 0;
+    let startsFromEvents = 0;
+    let downloadsFromEvents = 0;
+
+    rawEvents.forEach((ev) => {
+      if (!matchesPage(ev.page_id)) return;
+      if (!matchesDate(ev.created_at)) return;
+      if (ev.type === "view") viewsFromEvents++;
+      else if (ev.type === "start") startsFromEvents++;
+      else if (ev.type === "download") downloadsFromEvents++;
+    });
+
+    const isDateRestricted = dateRange !== "all";
     const isTodayIncluded = matchesDate(new Date().toISOString());
+
+    // 3. Baseline stats from page configs (work application 229, nursing 19, etc. + web page)
+    let viewsFromStats = 0;
+    let startsFromStats = 0;
+
     if (selectedPageId === "page_frontend_hub") {
-      const hubLeads = rawLeads.filter(isLeadFromHub).filter((l) => matchesDate(l.created_at));
-      const leads = hubLeads.length;
-      const completeLeads = hubLeads.filter((l) => !l.is_partial).length;
-      const views = isTodayIncluded ? Math.max(hubTraffic.views, leads) : leads;
-      const starts = isTodayIncluded ? Math.max(hubTraffic.form_clicks, leads) : leads;
-      const conversionRate = views > 0 ? Number(((leads / views) * 100).toFixed(1)) : (leads > 0 ? 100 : 0);
-      return {
-        views,
-        starts,
-        submits: leads,
-        downloads: 0,
-        leads,
-        completeLeads,
-        conversionRate,
-      };
+      viewsFromStats = hubTraffic.views;
+      startsFromStats = hubTraffic.form_clicks;
+    } else {
+      pages.forEach((p) => {
+        if (p.id === "page_frontend_hub") return;
+        if (selectedPageId !== "all" && p.id !== selectedPageId) return;
+        if (selectedPageId === "all" && p.status !== "live") return;
+
+        const configViews = Number(p.config?.views_count ?? p.config?.manual_views ?? 0);
+        viewsFromStats += configViews;
+        startsFromStats += Number((p.config as any)?.form_clicks ?? 0);
+      });
+
+      if (selectedPageId === "all") {
+        viewsFromStats += hubTraffic.views;
+        startsFromStats += hubTraffic.form_clicks;
+      }
     }
 
-    if (selectedPageId === "all") {
-      const matchedLeads = rawLeads.filter((l) => matchesDate(l.created_at));
-      const leads = matchedLeads.length;
-      const completeLeads = matchedLeads.filter((l) => !l.is_partial).length;
-      const views = isTodayIncluded ? Math.max(hubTraffic.views, leads) : leads;
-      const starts = isTodayIncluded ? Math.max(hubTraffic.form_clicks, leads) : leads;
-      const conversionRate = views > 0 ? Number(((leads / views) * 100).toFixed(1)) : (leads > 0 ? 100 : 0);
-      return {
-        views,
-        starts,
-        submits: leads,
-        downloads: 0,
-        leads,
-        completeLeads,
-        conversionRate,
-      };
+    let views = 0;
+    if (selectedPageId === "page_frontend_hub") {
+      views = isDateRestricted
+        ? (isTodayIncluded ? Math.max(hubTraffic.views, leads) : leads)
+        : Math.max(viewsFromStats, leads);
+    } else if (isDateRestricted) {
+      const hubViewsToAdd = (selectedPageId === "all" && isTodayIncluded) ? hubTraffic.views : 0;
+      views = Math.max(viewsFromEvents + hubViewsToAdd, leads);
+    } else {
+      views = Math.max(viewsFromStats, viewsFromEvents, leads);
     }
 
-    const pageLeads = rawLeads.filter((l) => l.page_id === selectedPageId).filter((l) => matchesDate(l.created_at));
-    const leads = pageLeads.length;
-    const completeLeads = pageLeads.filter((l) => !l.is_partial).length;
+    let starts = 0;
+    if (selectedPageId === "page_frontend_hub") {
+      starts = isDateRestricted
+        ? (isTodayIncluded ? Math.max(hubTraffic.form_clicks, leads) : leads)
+        : Math.max(startsFromStats, leads);
+    } else if (isDateRestricted) {
+      const hubStartsToAdd = (selectedPageId === "all" && isTodayIncluded) ? hubTraffic.form_clicks : 0;
+      starts = Math.max(startsFromEvents + hubStartsToAdd, leads);
+    } else {
+      starts = Math.max(startsFromStats, startsFromEvents, leads);
+    }
+
+    const conversionRate = views > 0
+      ? Number(((leads / views) * 100).toFixed(1))
+      : (leads > 0 ? 100 : 0);
+
     return {
-      views: leads,
-      starts: leads,
+      views,
+      starts,
       submits: leads,
-      downloads: 0,
+      downloads: downloadsFromEvents,
       leads,
       completeLeads,
-      conversionRate: leads > 0 ? 100 : 0,
+      conversionRate,
     };
-  }, [filteredTrends, hubTraffic, rawLeads, selectedPageId, dateRange, customStart, customEnd]);
+  }, [rawLeads, rawEvents, pages, hubTraffic, selectedPageId, dateRange, customStart, customEnd, activePageIds]);
 
   // Filter marketing attribution leads by page & date range
   const filteredSources = useMemo(() => {

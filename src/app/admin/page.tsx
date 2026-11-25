@@ -474,13 +474,20 @@ export default function AdminOverviewDashboard() {
       viewsFromStats = hubPageObj?.views_count || 0;
       startsFromStats = (hubPageObj?.config as any)?.form_clicks || hubPageObj?.views_count || 0;
     } else {
-      pageStats.forEach((s) => {
-        if (selectedPageId !== 'all' && s.page_id !== selectedPageId) {
-          return;
-        }
-        viewsFromStats += s.views || 0;
-        startsFromStats += s.starts || 0;
-        downloadsFromStats += s.downloads || 0;
+      rawPages.forEach((p) => {
+        if (p.id === 'page_frontend_hub') return;
+        if (selectedPageId !== 'all' && p.id !== selectedPageId) return;
+        if (selectedPageId === 'all' && p.status !== 'live') return;
+
+        const stat = pageStats.find((s) => s.page_id === p.id);
+        const configViews = Number(p.config?.views_count ?? p.config?.manual_views ?? 0);
+        const pViews = configViews > 0 ? configViews : (stat?.views || 0);
+        const pStarts = Number((p.config as any)?.form_clicks ?? stat?.starts ?? 0);
+        const pDownloads = Number(stat?.downloads || 0);
+
+        viewsFromStats += pViews;
+        startsFromStats += pStarts;
+        downloadsFromStats += pDownloads;
       });
 
       if (selectedPageId === 'all' && hubPageObj) {
@@ -562,12 +569,14 @@ export default function AdminOverviewDashboard() {
         const directCount = pageLeadCounts.get(p.id) || 0;
         const isHub = p.id === 'page_frontend_hub';
         const stat = pageStats.find((s) => s.page_id === p.id);
+        const configViews = Number(p.config?.views_count ?? p.config?.manual_views ?? 0);
+        const baselineViews = configViews > 0 ? configViews : (stat?.views || 0);
         const leadsCount = isFiltered ? directCount : Math.max(stat?.leads ?? 0, directCount);
         const pViews = isHub
           ? Math.max(p.views_count || 0, directCount)
           : isFiltered
-          ? Math.max(directCount, Math.round((stat?.views || 0) * (isSourceRestricted ? sourceRatio : 1)))
-          : (stat?.views || leadsCount);
+          ? Math.max(directCount, Math.round(baselineViews * (isSourceRestricted ? sourceRatio : 1)))
+          : Math.max(baselineViews, leadsCount);
         const pConv = pViews > 0 ? Number(((leadsCount / pViews) * 100).toFixed(1)) : (leadsCount > 0 ? 100 : 0);
         return {
           ...p,
