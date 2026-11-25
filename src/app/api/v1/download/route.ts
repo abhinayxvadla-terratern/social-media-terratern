@@ -24,6 +24,7 @@ export async function GET(req: NextRequest) {
   let fileName = 'TerraTern-Report';
   let pageId: string | null = null;
   let visitorId: string | null = null;
+  let resolvedPageKey: string | null = pageKey || null;
 
   // 1. Resolve storage path via token if present
   if (token) {
@@ -32,6 +33,7 @@ export async function GET(req: NextRequest) {
       storagePath = verified.payload.storage_path;
       visitorId = verified.payload.lead_id || null;
       if (verified.payload.page_key) {
+        resolvedPageKey = verified.payload.page_key;
         const { data: pData } = await supabase
           .from('pages')
           .select('id, name')
@@ -98,9 +100,16 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // Log download event non-blockingly
+  // Log download event non-blockingly via SECURITY DEFINER function
   try {
-    if (pageId) {
+    if (resolvedPageKey) {
+      await supabase.rpc('api_record_event', {
+        p_page_key: resolvedPageKey,
+        p_visitor_id: visitorId || 'anonymous_download',
+        p_type: 'download',
+        p_meta: { storage_path: storagePath, file_name: fileName },
+      });
+    } else if (pageId) {
       await supabase.from('events').insert({
         page_id: pageId,
         visitor_id: visitorId || 'anonymous_download',

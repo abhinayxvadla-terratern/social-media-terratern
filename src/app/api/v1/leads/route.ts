@@ -85,22 +85,25 @@ export async function POST(req: NextRequest) {
 
   const supabase = getSupabaseServiceClient();
 
-  // Retrieve page status & allowed origins
-  const { data: pageRows, error: pageErr } = await supabase.rpc('api_get_page_status', {
-    p_page_key: page_key.trim(),
-  });
-
-  let page = pageRows?.[0];
-  let corsHeaders: Record<string, string> = {};
-
   const isWebPageHub =
     page_key.trim() === 'public_hub' ||
     page_key.trim() === 'frontend_hub' ||
     page_key.trim() === 'page_frontend_hub' ||
     page_key.trim() === '';
 
+  // Canonical consultation page key for Web Page leads
+  const CANONICAL_HUB_PAGE_KEY = 'pk_f83561540afae097098bdbb7cf166c';
+  const effectivePageKey = isWebPageHub ? CANONICAL_HUB_PAGE_KEY : page_key.trim();
+
+  // Retrieve page status & allowed origins
+  const { data: pageRows, error: pageErr } = await supabase.rpc('api_get_page_status', {
+    p_page_key: effectivePageKey,
+  });
+
+  let page = pageRows?.[0];
+  let corsHeaders: Record<string, string> = {};
+
   if (!page) {
-    // If page_key is public_hub or frontend_hub, this is a legitimate Web Page consultation lead
     if (isWebPageHub) {
       const corsRes = validateOriginAndCors(req, ['*']);
       corsHeaders = corsRes.corsHeaders;
@@ -122,7 +125,7 @@ export async function POST(req: NextRequest) {
       );
     }
   } else {
-    const corsRes = validateOriginAndCors(req, page.allowed_origins);
+    const corsRes = validateOriginAndCors(req, isWebPageHub ? ['*'] : page.allowed_origins);
     if (!corsRes.isAllowed) {
       return NextResponse.json(
         { error: 'Origin not allowed for this page.' },
@@ -182,6 +185,12 @@ export async function POST(req: NextRequest) {
     (postIdFromUtm ? String(postIdFromUtm).trim() : null) ||
     null;
 
+  if (isWebPageHub) {
+    resolvedUtm.page_origin = 'frontend_hub';
+    resolvedUtm.page_name = resolvedUtm.page_name || 'Web Page';
+    resolvedUtm.calculator_name = resolvedUtm.calculator_name || 'Web Page';
+  }
+
   if (effectiveSource && !resolvedUtm.utm_source) {
     resolvedUtm.utm_source = effectiveSource;
   }
@@ -191,7 +200,7 @@ export async function POST(req: NextRequest) {
 
   // Submit complete lead via database function
   const { data: res, error: submitErr } = await supabase.rpc('api_submit_lead', {
-    p_page_key: page_key.trim(),
+    p_page_key: effectivePageKey,
     p_visitor_id: visitor_id.trim(),
     p_name: cleaned.name,
     p_email: cleaned.email,

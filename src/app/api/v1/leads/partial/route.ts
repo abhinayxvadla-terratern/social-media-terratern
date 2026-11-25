@@ -71,10 +71,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 });
   }
 
+  const isWebPageHub =
+    page_key.trim() === 'public_hub' ||
+    page_key.trim() === 'frontend_hub' ||
+    page_key.trim() === 'page_frontend_hub' ||
+    page_key.trim() === '';
+
+  const CANONICAL_HUB_PAGE_KEY = 'pk_f83561540afae097098bdbb7cf166c';
+  const effectivePageKey = isWebPageHub ? CANONICAL_HUB_PAGE_KEY : page_key.trim();
+
   const supabase = getSupabaseServiceClient();
 
   const { data: pageRows, error: pageErr } = await supabase.rpc('api_get_page_status', {
-    p_page_key: page_key.trim(),
+    p_page_key: effectivePageKey,
   });
 
   if (pageErr || !pageRows || pageRows.length === 0) {
@@ -82,7 +91,7 @@ export async function POST(req: NextRequest) {
   }
 
   const page = pageRows[0];
-  const { isAllowed, corsHeaders } = validateOriginAndCors(req, page.allowed_origins);
+  const { isAllowed, corsHeaders } = validateOriginAndCors(req, isWebPageHub ? ['*'] : page.allowed_origins);
 
   if (!isAllowed) {
     return NextResponse.json(
@@ -139,6 +148,12 @@ export async function POST(req: NextRequest) {
     (postIdFromUtm ? String(postIdFromUtm).trim() : null) ||
     null;
 
+  if (isWebPageHub) {
+    resolvedUtm.page_origin = 'frontend_hub';
+    resolvedUtm.page_name = resolvedUtm.page_name || 'Web Page';
+    resolvedUtm.calculator_name = resolvedUtm.calculator_name || 'Web Page';
+  }
+
   if (effectiveSource && !resolvedUtm.utm_source) {
     resolvedUtm.utm_source = effectiveSource;
   }
@@ -147,7 +162,7 @@ export async function POST(req: NextRequest) {
   }
 
   const { data: res, error: partialErr } = await supabase.rpc('api_submit_partial_lead', {
-    p_page_key: page_key.trim(),
+    p_page_key: effectivePageKey,
     p_visitor_id: visitor_id.trim(),
     p_name: cleanedName,
     p_phone_e164: phoneRes.e164,

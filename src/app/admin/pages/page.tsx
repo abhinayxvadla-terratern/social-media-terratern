@@ -260,7 +260,7 @@ export default function PagesManagementPage() {
           .select("page_id, views, starts, leads, conversion_percentage"),
         supabase
           .from("leads")
-          .select("page_id"),
+          .select("page_id, utm, source"),
       ]);
 
       if (pagesRes.error) throw pagesRes.error;
@@ -269,9 +269,19 @@ export default function PagesManagementPage() {
       const leadCountsData = leadCountsRes.data;
 
       const directLeadMap = new Map<string, number>();
+      let hubLeadsCount = 0;
       if (leadCountsData) {
         leadCountsData.forEach((l: any) => {
-          if (l.page_id) {
+          const isHub =
+            !l.page_id ||
+            l.page_id === "page_frontend_hub" ||
+            l.page_id === "public_hub" ||
+            l.utm?.page_origin === "frontend_hub" ||
+            (l.source || "").toLowerCase() === "website_hub";
+
+          if (isHub) {
+            hubLeadsCount += 1;
+          } else if (l.page_id) {
             directLeadMap.set(l.page_id, (directLeadMap.get(l.page_id) || 0) + 1);
           }
         });
@@ -323,7 +333,7 @@ export default function PagesManagementPage() {
 
       // Include Web Page (/) as a prominent first-class page in the pages table with verified real-time traffic
       const hubStat = statsMap.get("page_frontend_hub") || statsMap.get("public_hub");
-      const frontendHubLeads = directLeadMap.get("page_frontend_hub") || directLeadMap.get("public_hub") || (hubStat?.leads ?? 0);
+      const frontendHubLeads = Math.max(hubLeadsCount, directLeadMap.get("page_frontend_hub") || 0, directLeadMap.get("public_hub") || 0, (hubStat?.leads ?? 0));
 
       // Clear any legacy benchmark numbers (2450, 2451) in admin browser cache
       if (typeof window !== "undefined") {

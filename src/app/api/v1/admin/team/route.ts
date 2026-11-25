@@ -6,33 +6,25 @@ import { AdminRole } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
-// Helper to determine the public base URL for invite links
+// Helper to determine the public base URL for invite links dynamically
 function getBaseUrl(req: NextRequest): string {
   const envUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL;
   if (envUrl) {
     return envUrl.replace(/\/+$/, '');
   }
 
-  const host = req.headers.get('host') || '';
-  const origin = req.headers.get('origin') || '';
-
-  // If running on localhost or 127.0.0.1, fallback to live production domain
-  // so that shared invite links can be opened by teammates anywhere
-  if (
-    host.includes('localhost') ||
-    host.includes('127.0.0.1') ||
-    origin.includes('localhost') ||
-    origin.includes('127.0.0.1')
-  ) {
-    return 'https://social-media-terratern.vercel.app';
-  }
-
-  if (origin) {
+  const origin = req.headers.get('origin');
+  if (origin && !origin.includes('localhost') && !origin.includes('127.0.0.1')) {
     return origin.replace(/\/+$/, '');
   }
 
-  const protocol = req.headers.get('x-forwarded-proto') || 'https';
-  return `${protocol}://${host}`.replace(/\/+$/, '');
+  const host = req.headers.get('host');
+  if (host && !host.includes('localhost') && !host.includes('127.0.0.1')) {
+    const protocol = req.headers.get('x-forwarded-proto') || 'https';
+    return `${protocol}://${host}`.replace(/\/+$/, '');
+  }
+
+  return origin || (host ? `https://${host}` : 'https://social-media-terratern.vercel.app');
 }
 
 // Helper to check caller is owner

@@ -110,6 +110,28 @@ export default function NativePublicLandingPage({ params }: DynamicPageProps) {
           if (cfg?.page_type === 'lead_magnet' || cfg?.page_type === 'consultation') {
             setActiveStep('lead');
           }
+
+          // Track landing page view event (deduplicated per browser session)
+          if (typeof window !== 'undefined' && data.page_key) {
+            try {
+              const sessionKey = `tt_view_${data.slug}`;
+              if (!sessionStorage.getItem(sessionKey)) {
+                sessionStorage.setItem(sessionKey, '1');
+                const vid = localStorage.getItem('tt_vid') || 'vis_' + Math.random().toString(36).slice(2, 10);
+                localStorage.setItem('tt_vid', vid);
+                fetch('/api/v1/events', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    page_key: data.page_key,
+                    visitor_id: vid,
+                    type: 'view',
+                    meta: { slug: data.slug, trigger: 'direct_page_load' },
+                  }),
+                }).catch(() => {});
+              }
+            } catch {}
+          }
         } else {
           setError(data.error || 'Page not found');
         }
@@ -148,6 +170,23 @@ export default function NativePublicLandingPage({ params }: DynamicPageProps) {
   const handleSelectOption = (qNum: number, opt: { label: string; points: number }) => {
     const updated = { ...selectedAnswers, [qNum]: opt };
     setSelectedAnswers(updated);
+
+    // Track funnel assessment start event when first question is answered
+    if (activeQuestionIdx === 0 && page?.page_key) {
+      try {
+        const vid = typeof window !== 'undefined' ? (localStorage.getItem('tt_vid') || 'vis_' + Date.now()) : 'anon';
+        fetch('/api/v1/events', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            page_key: page.page_key,
+            visitor_id: vid,
+            type: 'start',
+            meta: { slug: page.slug, trigger: 'quiz_started' },
+          }),
+        }).catch(() => {});
+      } catch {}
+    }
 
     if (activeQuestionIdx < questions.length - 1) {
       setActiveQuestionIdx(activeQuestionIdx + 1);
