@@ -223,6 +223,7 @@ export default function LeadsManagementPage() {
       if (l.email) keys.push(`e:${l.email.trim().toLowerCase()}`);
 
       const isHub =
+        !l.page_id ||
         l.page_id === "page_frontend_hub" ||
         l.page_id === "public_hub" ||
         l.page?.slug === "" ||
@@ -242,6 +243,7 @@ export default function LeadsManagementPage() {
         map[k].count += 1;
         map[k].pageNames.add(pageTitle);
         if (l.page_id) map[k].pageIds.add(l.page_id);
+        else map[k].pageIds.add("page_frontend_hub");
       });
     });
 

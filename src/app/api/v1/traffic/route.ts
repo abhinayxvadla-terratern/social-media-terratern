@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getSupabaseServiceClient } from '@/lib/api-security';
 import fs from 'fs';
 import path from 'path';
 
@@ -20,41 +21,70 @@ let cachedTraffic: TrafficData = {
   last_updated: new Date().toISOString(),
 };
 
-function readPersistedTraffic(): TrafficData {
-  // Check writable paths
-  for (const p of [TRAFFIC_FILE_PATH, TMP_TRAFFIC_PATH]) {
+let lastDbSync = 0;
+
+async function syncFromDatabase(): Promise<TrafficData> {
+  const now = Date.now();
+  // Fetch from Supabase app_settings every 30 seconds or if never synced
+  if (now - lastDbSync > 30 * 1000 || lastDbSync === 0) {
     try {
-      if (fs.existsSync(p)) {
-        const raw = fs.readFileSync(p, 'utf8');
-        const parsed = JSON.parse(raw);
-        if (typeof parsed.views === 'number') {
-          cachedTraffic = {
-            views: Math.max(parsed.views, 0),
-            form_clicks: Number(parsed.form_clicks || 0),
-            last_updated: parsed.last_updated || new Date().toISOString(),
-          };
-          return cachedTraffic;
-        }
+      const supabase = getSupabaseServiceClient();
+      const { data } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'webpage_traffic')
+        .maybeSingle();
+
+      if (data?.value && typeof data.value.views === 'number') {
+        cachedTraffic = {
+          views: Math.max(0, Number(data.value.views)),
+          form_clicks: Math.max(0, Number(data.value.form_clicks || 0)),
+          last_updated: data.value.last_updated || new Date().toISOString(),
+        };
+        lastDbSync = now;
+        return cachedTraffic;
       }
     } catch {
-      // Continue to next path
+      // Fallback to local / cached memory
     }
   }
   return cachedTraffic;
 }
 
-function writePersistedTraffic(data: TrafficData) {
+async function persistToDatabase(data: TrafficData) {
   cachedTraffic = data;
-  const content = JSON.stringify(data);
-  for (const p of [TRAFFIC_FILE_PATH, TMP_TRAFFIC_PATH]) {
-    try {
-      const dir = path.dirname(p);
-      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(p, content, 'utf8');
-      break;
-    } catch {
-      // Continue
+  lastDbSync = Date.now();
+
+  // 1. Write to local file/tmp for local fallbacks
+  try {
+    const content = JSON.stringify(data);
+    for (const p of [TRAFFIC_FILE_PATH, TMP_TRAFFIC_PATH]) {
+      try {
+        const dir = path.dirname(p);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(p, content, 'utf8');
+        break;
+      } catch {}
     }
+  } catch {}
+
+  // 2. Persist to Supabase app_settings for true serverless multi-instance persistence
+  try {
+    const supabase = getSupabaseServiceClient();
+    await supabase.from('app_settings').upsert(
+      {
+        key: 'webpage_traffic',
+        value: {
+          views: data.views,
+          form_clicks: data.form_clicks,
+          last_updated: data.last_updated,
+        },
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'key' }
+    );
+  } catch (err) {
+    console.error('Failed to persist traffic to database:', err);
   }
 }
 
@@ -67,13 +97,13 @@ export async function OPTIONS() {
     headers: {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-admin-token',
     },
   });
 }
 
 export async function GET() {
-  const current = readPersistedTraffic();
+  const current = await syncFromDatabase();
   return NextResponse.json(
     {
       success: true,
@@ -98,7 +128,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { type, visitor_id, trigger } = body || {};
 
-    const current = readPersistedTraffic();
+    const current = await syncFromDatabase();
     const now = Date.now();
 
     if (type === 'view') {
@@ -109,17 +139,44 @@ export async function POST(req: NextRequest) {
         seenVisitors.set(vid, now);
         current.views += 1;
         current.last_updated = new Date().toISOString();
-        writePersistedTraffic(current);
+        await persistToDatabase(current);
       }
     } else if (type === 'form_click') {
       // Increment general form button clicks (Hero, Header, Bottom Banner CTAs)
       current.form_clicks += 1;
       current.last_updated = new Date().toISOString();
-      writePersistedTraffic(current);
+      await persistToDatabase(current);
     } else if (type === 'set_views' || type === 'reset') {
+      // Authenticate admin caller before permitting manual view changes
+      let isAuthorized = false;
+      const authHeader = req.headers.get('authorization') || '';
+      const adminToken = authHeader.replace(/^Bearer\s+/i, '') || req.headers.get('x-admin-token');
+      const expectedAdminToken = process.env.ADMIN_API_TOKEN || 'tt_admin_sec_dev_2026_x89';
+      if (adminToken && adminToken === expectedAdminToken) {
+        isAuthorized = true;
+      }
+
+      if (!isAuthorized) {
+        try {
+          const { createServerSupabaseClient } = await import('@/lib/supabase/server');
+          const serverClient = await createServerSupabaseClient();
+          const { data: { user } } = await serverClient.auth.getUser();
+          if (user) {
+            isAuthorized = true;
+          }
+        } catch {}
+      }
+
+      if (!isAuthorized) {
+        return NextResponse.json(
+          { error: 'Unauthorized: Admin authentication required to override traffic numbers.' },
+          { status: 401 }
+        );
+      }
+
       current.views = typeof body.views === 'number' ? Math.max(0, body.views) : 0;
       current.last_updated = new Date().toISOString();
-      writePersistedTraffic(current);
+      await persistToDatabase(current);
     }
 
     return NextResponse.json(

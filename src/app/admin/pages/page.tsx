@@ -601,7 +601,16 @@ export default function PagesManagementPage() {
 
   // Delete page (Owner only)
   const handleDeleteConfirm = async () => {
-    if (!deleteConfirmPage || !isOwner) return;
+    if (
+      !deleteConfirmPage ||
+      !isOwner ||
+      deleteConfirmPage.id === "page_frontend_hub" ||
+      deleteConfirmPage.slug === "" ||
+      deleteConfirmPage.page_key === "public_hub"
+    ) {
+      setDeleteConfirmPage(null);
+      return;
+    }
     try {
       const { error } = await supabase
         .from("pages")
@@ -763,10 +772,14 @@ export default function PagesManagementPage() {
   };
 
   const handleBulkDelete = async () => {
-    if (selectedPageIds.length === 0 || !isOwner) return;
+    const safeIdsToDelete = selectedPageIds.filter((id) => id !== "page_frontend_hub");
+    if (safeIdsToDelete.length === 0 || !isOwner) {
+      setSelectedPageIds([]);
+      return;
+    }
     if (
       !confirm(
-        `Are you sure you want to delete ${selectedPageIds.length} selected page(s)? This action cannot be undone.`
+        `Are you sure you want to delete ${safeIdsToDelete.length} selected page(s)? This action cannot be undone.`
       )
     ) {
       return;
@@ -777,11 +790,11 @@ export default function PagesManagementPage() {
       const { error } = await supabase
         .from("pages")
         .delete()
-        .in("id", selectedPageIds);
+        .in("id", safeIdsToDelete);
 
       if (error) throw error;
 
-      setPages((prev) => prev.filter((p) => !selectedPageIds.includes(p.id)));
+      setPages((prev) => prev.filter((p) => !safeIdsToDelete.includes(p.id)));
       setSelectedPageIds([]);
     } catch (err: any) {
       alert("Error deleting pages: " + err.message);
@@ -1012,12 +1025,14 @@ export default function PagesManagementPage() {
                   {/* Top: Checkbox, Name, Type & Interactive Status */}
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-start gap-2.5 flex-1 min-w-0">
-                      <input
-                        type="checkbox"
-                        checked={selectedPageIds.includes(page.id)}
-                        onChange={() => toggleSelectPage(page.id)}
-                        className="w-4 h-4 mt-1 rounded border-slate-300 text-[#00215C] focus:ring-[#255CC1]"
-                      />
+                      {page.id !== "page_frontend_hub" && page.slug !== "" && (
+                        <input
+                          type="checkbox"
+                          checked={selectedPageIds.includes(page.id)}
+                          onChange={() => toggleSelectPage(page.id)}
+                          className="w-4 h-4 mt-1 rounded border-slate-300 text-[#00215C] focus:ring-[#255CC1]"
+                        />
+                      )}
                       <div className="flex-1 min-w-0">
                         <h3 className="font-bold text-base text-slate-900 leading-snug break-words">
                           {page.page_key === "public_hub" || page.slug === "" ? "Web Page" : displayName}
@@ -1180,21 +1195,25 @@ export default function PagesManagementPage() {
                         >
                           <Edit2 className="w-4 h-4" />
                         </button>
-                        <button
-                          onClick={() => handleDuplicate(page)}
-                          className="touch-target p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition"
-                          title="Duplicate Page"
-                        >
-                          <CopyPlus className="w-4 h-4" />
-                        </button>
-                        {isOwner && (
-                          <button
-                            onClick={() => setDeleteConfirmPage(page)}
-                            className="touch-target p-2 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition"
-                            title="Delete Page"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                        {page.id !== "page_frontend_hub" && page.slug !== "" && (
+                          <>
+                            <button
+                              onClick={() => handleDuplicate(page)}
+                              className="touch-target p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition"
+                              title="Duplicate Page"
+                            >
+                              <CopyPlus className="w-4 h-4" />
+                            </button>
+                            {isOwner && (
+                              <button
+                                onClick={() => setDeleteConfirmPage(page)}
+                                className="touch-target p-2 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition"
+                                title="Delete Page"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </>
                         )}
                       </div>
                     )}
@@ -1244,13 +1263,17 @@ export default function PagesManagementPage() {
                       >
                         {/* 1. Checkbox */}
                         <td className="py-3.5 px-3 text-center">
-                          <input
-                            type="checkbox"
-                            aria-label={`Select page ${page.name}`}
-                            checked={selectedPageIds.includes(page.id)}
-                            onChange={() => toggleSelectPage(page.id)}
-                            className="w-4 h-4 rounded border-slate-300 text-[#00215C] focus:ring-[#255CC1]"
-                          />
+                          {page.id !== "page_frontend_hub" && page.slug !== "" ? (
+                            <input
+                              type="checkbox"
+                              aria-label={`Select page ${page.name}`}
+                              checked={selectedPageIds.includes(page.id)}
+                              onChange={() => toggleSelectPage(page.id)}
+                              className="w-4 h-4 rounded border-slate-300 text-[#00215C] focus:ring-[#255CC1]"
+                            />
+                          ) : (
+                            <span className="text-[10px] text-slate-300 font-mono">—</span>
+                          )}
                         </td>
 
                         {/* 2. Page & Route */}
@@ -1429,21 +1452,25 @@ export default function PagesManagementPage() {
                                 >
                                   <Edit2 className="w-4 h-4" />
                                 </button>
-                                <button
-                                  onClick={() => handleDuplicate(page)}
-                                  className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition"
-                                  title="Duplicate page"
-                                >
-                                  <CopyPlus className="w-4 h-4" />
-                                </button>
-                                {isOwner && (
-                                  <button
-                                    onClick={() => setDeleteConfirmPage(page)}
-                                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
-                                    title="Delete page"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
+                                {page.id !== "page_frontend_hub" && page.slug !== "" && (
+                                  <>
+                                    <button
+                                      onClick={() => handleDuplicate(page)}
+                                      className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition"
+                                      title="Duplicate page"
+                                    >
+                                      <CopyPlus className="w-4 h-4" />
+                                    </button>
+                                    {isOwner && (
+                                      <button
+                                        onClick={() => setDeleteConfirmPage(page)}
+                                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                                        title="Delete page"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    )}
+                                  </>
                                 )}
                               </div>
                             )}
