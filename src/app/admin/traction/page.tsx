@@ -42,7 +42,7 @@ export default function TractionAnalyticsPage() {
   const [error, setError] = useState<string | null>(null);
 
   // Filters
-  const [dateRange, setDateRange] = useState<"today" | "7d" | "30d" | "custom">("30d");
+  const [dateRange, setDateRange] = useState<"all" | "today" | "7d" | "30d" | "custom">("all");
   const [customStart, setCustomStart] = useState<string>("");
   const [customEnd, setCustomEnd] = useState<string>("");
   const [selectedPageId, setSelectedPageId] = useState<string>("all");
@@ -164,20 +164,54 @@ export default function TractionAnalyticsPage() {
     return pageId === selectedPageId;
   };
 
+  const getLocalDateString = (iso: string) => {
+    try {
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return iso.split("T")[0];
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    } catch {
+      return iso.split("T")[0];
+    }
+  };
+
   const matchesDate = (isoStr: string) => {
-    if (!isoStr) return true;
-    const itemDate = isoStr.split("T")[0];
+    if (!isoStr || dateRange === "all") return true;
+    const itemDate = new Date(isoStr);
+    if (isNaN(itemDate.getTime())) return true;
+
+    const now = new Date();
+    if (dateRange === "today") {
+      const isCalendarToday =
+        itemDate.getFullYear() === now.getFullYear() &&
+        itemDate.getMonth() === now.getMonth() &&
+        itemDate.getDate() === now.getDate();
+      const isLast24h =
+        now.getTime() - itemDate.getTime() <= 24 * 60 * 60 * 1000 &&
+        itemDate.getTime() <= now.getTime();
+      return isCalendarToday || isLast24h;
+    }
+    if (dateRange === "7d") {
+      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      return itemDate >= sevenDaysAgo;
+    }
+    if (dateRange === "30d") {
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      return itemDate >= thirtyDaysAgo;
+    }
     if (dateRange === "custom") {
-      if (customStart && itemDate < customStart) return false;
-      if (customEnd && itemDate > customEnd) return false;
+      if (customStart) {
+        const start = new Date(`${customStart}T00:00:00`);
+        if (!isNaN(start.getTime()) && itemDate < start) return false;
+      }
+      if (customEnd) {
+        const end = new Date(`${customEnd}T23:59:59.999`);
+        if (!isNaN(end.getTime()) && itemDate > end) return false;
+      }
       return true;
     }
-    const itemTime = new Date(isoStr).getTime();
-    const now = new Date();
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    if (dateRange === "today") return itemTime >= startOfToday;
-    if (dateRange === "7d") return itemTime >= startOfToday - 7 * 24 * 60 * 60 * 1000;
-    if (dateRange === "30d") return itemTime >= startOfToday - 30 * 24 * 60 * 60 * 1000;
     return true;
   };
 
@@ -201,7 +235,7 @@ export default function TractionAnalyticsPage() {
     rawEvents.forEach((ev) => {
       if (!matchesPage(ev.page_id)) return;
       if (!matchesDate(ev.created_at)) return;
-      const date = ev.created_at.split("T")[0];
+      const date = getLocalDateString(ev.created_at);
       const p = pages.find((page) => page.id === ev.page_id);
       const isHub = ev.page_id === "page_frontend_hub" || ev.page_id === "public_hub";
       const pageId = isHub ? "page_frontend_hub" : ev.page_id;
@@ -236,7 +270,7 @@ export default function TractionAnalyticsPage() {
     rawLeads.forEach((l) => {
       if (!matchesPage(l.page_id, l)) return;
       if (!matchesDate(l.created_at)) return;
-      const date = l.created_at.split("T")[0];
+      const date = getLocalDateString(l.created_at);
       const isHub = isLeadFromHub(l);
       const pageId = isHub ? "page_frontend_hub" : (l.page_id || "unknown");
       const p = pages.find((page) => page.id === pageId);
@@ -269,8 +303,9 @@ export default function TractionAnalyticsPage() {
 
     // 3. For Web Page: ensure live verified views & form clicks are represented for today
     if (selectedPageId === "page_frontend_hub" || selectedPageId === "all") {
-      const todayStr = new Date().toISOString().split("T")[0];
-      if (matchesDate(todayStr)) {
+      const todayIso = new Date().toISOString();
+      if (matchesDate(todayIso) && (hubTraffic.views > 0 || hubTraffic.form_clicks > 0)) {
+        const todayStr = getLocalDateString(todayIso);
         const hubKey = `${todayStr}_page_frontend_hub`;
         let hubRecord = dayMap.get(hubKey);
         if (!hubRecord) {
@@ -331,13 +366,14 @@ export default function TractionAnalyticsPage() {
       };
     }
 
-    // Fallback if no activity found
+    // Fallback if no activity found in trends
+    const isTodayIncluded = matchesDate(new Date().toISOString());
     if (selectedPageId === "page_frontend_hub") {
       const hubLeads = rawLeads.filter(isLeadFromHub).filter((l) => matchesDate(l.created_at));
       const leads = hubLeads.length;
       const completeLeads = hubLeads.filter((l) => !l.is_partial).length;
-      const views = Math.max(hubTraffic.views, leads);
-      const starts = Math.max(hubTraffic.form_clicks, leads);
+      const views = isTodayIncluded ? Math.max(hubTraffic.views, leads) : leads;
+      const starts = isTodayIncluded ? Math.max(hubTraffic.form_clicks, leads) : leads;
       const conversionRate = views > 0 ? Number(((leads / views) * 100).toFixed(1)) : (leads > 0 ? 100 : 0);
       return {
         views,
@@ -350,14 +386,35 @@ export default function TractionAnalyticsPage() {
       };
     }
 
+    if (selectedPageId === "all") {
+      const matchedLeads = rawLeads.filter((l) => matchesDate(l.created_at));
+      const leads = matchedLeads.length;
+      const completeLeads = matchedLeads.filter((l) => !l.is_partial).length;
+      const views = isTodayIncluded ? Math.max(hubTraffic.views, leads) : leads;
+      const starts = isTodayIncluded ? Math.max(hubTraffic.form_clicks, leads) : leads;
+      const conversionRate = views > 0 ? Number(((leads / views) * 100).toFixed(1)) : (leads > 0 ? 100 : 0);
+      return {
+        views,
+        starts,
+        submits: leads,
+        downloads: 0,
+        leads,
+        completeLeads,
+        conversionRate,
+      };
+    }
+
+    const pageLeads = rawLeads.filter((l) => l.page_id === selectedPageId).filter((l) => matchesDate(l.created_at));
+    const leads = pageLeads.length;
+    const completeLeads = pageLeads.filter((l) => !l.is_partial).length;
     return {
-      views: 0,
-      starts: 0,
-      submits: 0,
+      views: leads,
+      starts: leads,
+      submits: leads,
       downloads: 0,
-      leads: 0,
-      completeLeads: 0,
-      conversionRate: 0,
+      leads,
+      completeLeads,
+      conversionRate: leads > 0 ? 100 : 0,
     };
   }, [filteredTrends, hubTraffic, rawLeads, selectedPageId, dateRange, customStart, customEnd]);
 
@@ -432,10 +489,11 @@ export default function TractionAnalyticsPage() {
           </select>
         </div>
 
-        {/* Date Range Selector (Phone-first pills) */}
+        {/* Date Range Selector (Phone-first pills) + Quick Refresh */}
         <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
           {(
             [
+              { id: "all", label: "All Time" },
               { id: "today", label: "Today" },
               { id: "7d", label: "7 Days" },
               { id: "30d", label: "30 Days" },
@@ -444,7 +502,13 @@ export default function TractionAnalyticsPage() {
           ).map((item) => (
             <button
               key={item.id}
-              onClick={() => setDateRange(item.id)}
+              onClick={() => {
+                setDateRange(item.id);
+                if (item.id !== "custom") {
+                  setCustomStart("");
+                  setCustomEnd("");
+                }
+              }}
               className={`touch-target px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
                 dateRange === item.id
                   ? "bg-blue-600 text-white shadow-sm shadow-blue-600/30"
@@ -454,6 +518,15 @@ export default function TractionAnalyticsPage() {
               {item.label}
             </button>
           ))}
+
+          <button
+            onClick={() => fetchTractionData()}
+            disabled={loading}
+            title="Refresh analytics data"
+            className="touch-target p-2 rounded-xl text-xs font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all flex items-center justify-center disabled:opacity-50 ml-1"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-blue-600" : ""}`} />
+          </button>
         </div>
       </div>
 
@@ -462,19 +535,37 @@ export default function TractionAnalyticsPage() {
         <div className="p-3 bg-blue-50/60 border border-blue-200 rounded-xl flex flex-wrap items-center gap-3 text-xs animate-in fade-in">
           <Calendar className="w-4 h-4 text-blue-600" />
           <span className="font-semibold text-blue-900">Custom Range:</span>
-          <input
-            type="date"
-            value={customStart}
-            onChange={(e) => setCustomStart(e.target.value)}
-            className="px-2.5 py-1.5 bg-white border border-blue-200 rounded-lg text-xs"
-          />
-          <span className="text-slate-400">to</span>
-          <input
-            type="date"
-            value={customEnd}
-            onChange={(e) => setCustomEnd(e.target.value)}
-            className="px-2.5 py-1.5 bg-white border border-blue-200 rounded-lg text-xs"
-          />
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-500 text-[11px]">From</span>
+            <input
+              type="date"
+              value={customStart}
+              max={customEnd || undefined}
+              onChange={(e) => setCustomStart(e.target.value)}
+              className="px-2.5 py-1.5 bg-white border border-blue-200 rounded-lg text-xs"
+            />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-500 text-[11px]">To</span>
+            <input
+              type="date"
+              value={customEnd}
+              min={customStart || undefined}
+              onChange={(e) => setCustomEnd(e.target.value)}
+              className="px-2.5 py-1.5 bg-white border border-blue-200 rounded-lg text-xs"
+            />
+          </div>
+          {(customStart || customEnd) && (
+            <button
+              onClick={() => {
+                setCustomStart("");
+                setCustomEnd("");
+              }}
+              className="text-[11px] font-semibold text-blue-600 hover:underline ml-2"
+            >
+              Clear
+            </button>
+          )}
         </div>
       )}
 
