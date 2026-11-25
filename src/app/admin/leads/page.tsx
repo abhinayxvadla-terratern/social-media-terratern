@@ -192,7 +192,7 @@ export default function LeadsManagementPage() {
       ]);
 
       const pagesData = pagesRes.data;
-      const hubPageBrief = { id: "page_frontend_hub", name: "Webpage (/)", slug: "" } as Page;
+      const hubPageBrief = { id: "page_frontend_hub", name: "Web Page (/)", slug: "" } as Page;
       const allPagesBrief = [hubPageBrief, ...(pagesData as Page[] || [])];
       setPages(allPagesBrief);
       setCachedData("admin_pages_brief", allPagesBrief);
@@ -386,6 +386,7 @@ export default function LeadsManagementPage() {
       const isHubLead =
         lead.page_id === "page_frontend_hub" ||
         lead.page_id === "public_hub" ||
+        !lead.page_id ||
         lead.page?.slug === "" ||
         lead.page?.slug === "public-hub" ||
         lead.utm?.page_origin === "frontend_hub" ||

@@ -269,12 +269,14 @@ export default function AdminOverviewDashboard() {
         const storedViews = typeof window !== "undefined" ? Number(localStorage.getItem("tt_hub_traffic") || 0) : 0;
         const storedClicks = typeof window !== "undefined" ? Number(localStorage.getItem("tt_hub_form_clicks") || 0) : 0;
 
-        const frontendViews = Math.max(hubStat?.views ?? 0, liveWebTraffic.views, storedViews, 0);
+        const manualHubViews = typeof window !== "undefined" ? localStorage.getItem("tt_hub_manual_views") : null;
+        const frontendViews = manualHubViews !== null && manualHubViews !== "" && !isNaN(Number(manualHubViews))
+          ? Number(manualHubViews)
+          : Math.max(hubStat?.views ?? 0, liveWebTraffic.views, storedViews, 0);
         const frontendClicks = Math.max(hubStat?.starts ?? 0, liveWebTraffic.form_clicks, storedClicks, hubLeadsCount);
 
-        // Web Page Conversion: Strictly based on form button clicks (intent traffic), not raw browsing views
-        const frontendConversion = frontendClicks > 0
-          ? Number(((hubLeadsCount / frontendClicks) * 100).toFixed(1))
+        const frontendConversion = frontendViews > 0
+          ? Number(((hubLeadsCount / frontendViews) * 100).toFixed(1))
           : (hubLeadsCount > 0 ? 100 : 0);
 
         const hubPageRecord: Page = {
@@ -287,6 +289,7 @@ export default function AdminOverviewDashboard() {
           conversion_percentage: frontendConversion,
           config: {
             ...(FRONTEND_HUB_PAGE.config || {}),
+            views_count: manualHubViews !== null && manualHubViews !== "" && !isNaN(Number(manualHubViews)) ? Number(manualHubViews) : frontendViews,
             form_clicks: frontendClicks,
           },
         };
@@ -498,7 +501,8 @@ export default function AdminOverviewDashboard() {
     if (selectedPageId === 'page_frontend_hub') {
       totalViews = Math.max(viewsFromStats, totalLeads);
     } else if (isDateRestricted) {
-      totalViews = Math.max(viewsFromEvents, totalLeads);
+      const hubViewsToAdd = (selectedPageId === 'all' && hubPageObj) ? (hubPageObj.views_count || 0) : 0;
+      totalViews = Math.max(viewsFromEvents + hubViewsToAdd, totalLeads);
     } else if (isSourceRestricted) {
       totalViews = Math.max(viewsFromEvents, Math.round(viewsFromStats * sourceRatio), totalLeads);
     } else {
@@ -509,7 +513,8 @@ export default function AdminOverviewDashboard() {
     if (selectedPageId === 'page_frontend_hub') {
       totalStarts = Math.max(startsFromStats, totalLeads);
     } else if (isDateRestricted) {
-      totalStarts = Math.max(startsFromEvents, totalLeads);
+      const hubStartsToAdd = (selectedPageId === 'all' && hubPageObj) ? ((hubPageObj.config as any)?.form_clicks || hubPageObj.views_count || 0) : 0;
+      totalStarts = Math.max(startsFromEvents + hubStartsToAdd, totalLeads);
     } else if (isSourceRestricted) {
       totalStarts = Math.max(startsFromEvents, Math.round(startsFromStats * sourceRatio), totalLeads);
     } else {
