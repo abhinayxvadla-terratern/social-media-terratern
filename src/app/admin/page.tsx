@@ -345,17 +345,28 @@ export default function AdminOverviewDashboard() {
   const activeSources = useMemo(() => {
     const sourcesSet = new Set<string>();
 
-    const matchesPage = (pageId: string | null | undefined) => {
-      if (!pageId) return false;
+    const isLeadFromHub = (l: any) =>
+      l.page_id === "page_frontend_hub" ||
+      l.page_id === "public_hub" ||
+      !l.page_id ||
+      l.utm?.page_origin === "frontend_hub" ||
+      l.page?.slug === "" ||
+      l.page?.slug === "public-hub" ||
+      (l.source || "").toLowerCase() === "website_hub";
+
+    const matchesPage = (pageId: string | null | undefined, lead?: any) => {
       if (selectedPageId !== 'all') {
+        if (selectedPageId === 'page_frontend_hub') {
+          return pageId === 'page_frontend_hub' || pageId === 'public_hub' || (lead && isLeadFromHub(lead));
+        }
         return pageId === selectedPageId;
       }
-      return activePageIds.has(pageId);
+      return !pageId || activePageIds.has(pageId) || (lead && isLeadFromHub(lead));
     };
 
     // Sources from leads on active pages
     rawLeads.forEach((lead) => {
-      if (matchesPage(lead.page_id)) {
+      if (matchesPage(lead.page_id, lead)) {
         const info = getChannelInfo(lead.source);
         if (info.label) sourcesSet.add(info.label);
       }
@@ -375,6 +386,15 @@ export default function AdminOverviewDashboard() {
 
   // Compute filtered metrics dynamically
   const computedData = useMemo(() => {
+    const isLeadFromHub = (l: any) =>
+      l.page_id === "page_frontend_hub" ||
+      l.page_id === "public_hub" ||
+      !l.page_id ||
+      l.utm?.page_origin === "frontend_hub" ||
+      l.page?.slug === "" ||
+      l.page?.slug === "public-hub" ||
+      (l.source || "").toLowerCase() === "website_hub";
+
     // 1. Filter Leads
     const filteredLeads = rawLeads.filter((lead) => {
       // Date filter
@@ -382,9 +402,13 @@ export default function AdminOverviewDashboard() {
 
       // Page filter (only active pages unless specific page selected)
       if (selectedPageId !== 'all') {
-        if (lead.page_id !== selectedPageId) return false;
+        if (selectedPageId === 'page_frontend_hub') {
+          if (!isLeadFromHub(lead)) return false;
+        } else {
+          if (lead.page_id !== selectedPageId) return false;
+        }
       } else {
-        if (lead.page_id && !activePageIds.has(lead.page_id)) return false;
+        if (lead.page_id && !activePageIds.has(lead.page_id) && !isLeadFromHub(lead)) return false;
       }
 
       // Source filter
@@ -407,9 +431,13 @@ export default function AdminOverviewDashboard() {
 
       // Page filter
       if (selectedPageId !== 'all') {
-        if (event.page_id !== selectedPageId) return false;
+        if (selectedPageId === 'page_frontend_hub') {
+          if (event.page_id !== 'page_frontend_hub' && event.page_id !== 'public_hub') return false;
+        } else {
+          if (event.page_id !== selectedPageId) return false;
+        }
       } else {
-        if (event.page_id && !activePageIds.has(event.page_id)) return false;
+        if (event.page_id && !activePageIds.has(event.page_id) && event.page_id !== 'page_frontend_hub') return false;
       }
 
       return true;
@@ -437,14 +465,26 @@ export default function AdminOverviewDashboard() {
     let startsFromStats = 0;
     let downloadsFromStats = 0;
 
-    pageStats.forEach((s) => {
-      if (selectedPageId !== 'all' && s.page_id !== selectedPageId) {
-        return;
+    const hubPageObj = rawPages.find((p) => p.id === 'page_frontend_hub');
+
+    if (selectedPageId === 'page_frontend_hub') {
+      viewsFromStats = hubPageObj?.views_count || 0;
+      startsFromStats = (hubPageObj?.config as any)?.form_clicks || hubPageObj?.views_count || 0;
+    } else {
+      pageStats.forEach((s) => {
+        if (selectedPageId !== 'all' && s.page_id !== selectedPageId) {
+          return;
+        }
+        viewsFromStats += s.views || 0;
+        startsFromStats += s.starts || 0;
+        downloadsFromStats += s.downloads || 0;
+      });
+
+      if (selectedPageId === 'all' && hubPageObj) {
+        viewsFromStats += hubPageObj.views_count || 0;
+        startsFromStats += (hubPageObj.config as any)?.form_clicks || hubPageObj.views_count || 0;
       }
-      viewsFromStats += s.views || 0;
-      startsFromStats += s.starts || 0;
-      downloadsFromStats += s.downloads || 0;
-    });
+    }
 
     const isDateRestricted = timeRange !== 'all' && (timeRange !== 'custom' || Boolean(startDate || endDate));
     const isSourceRestricted = selectedSource !== 'all';
@@ -455,7 +495,9 @@ export default function AdminOverviewDashboard() {
       : 1;
 
     let totalViews = 0;
-    if (isDateRestricted) {
+    if (selectedPageId === 'page_frontend_hub') {
+      totalViews = Math.max(viewsFromStats, totalLeads);
+    } else if (isDateRestricted) {
       totalViews = Math.max(viewsFromEvents, totalLeads);
     } else if (isSourceRestricted) {
       totalViews = Math.max(viewsFromEvents, Math.round(viewsFromStats * sourceRatio), totalLeads);
@@ -464,7 +506,9 @@ export default function AdminOverviewDashboard() {
     }
 
     let totalStarts = 0;
-    if (isDateRestricted) {
+    if (selectedPageId === 'page_frontend_hub') {
+      totalStarts = Math.max(startsFromStats, totalLeads);
+    } else if (isDateRestricted) {
       totalStarts = Math.max(startsFromEvents, totalLeads);
     } else if (isSourceRestricted) {
       totalStarts = Math.max(startsFromEvents, Math.round(startsFromStats * sourceRatio), totalLeads);
@@ -487,6 +531,9 @@ export default function AdminOverviewDashboard() {
     // 5. Pages status
     const pageLeadCounts = new Map<string, number>();
     filteredLeads.forEach((lead) => {
+      if (isLeadFromHub(lead)) {
+        pageLeadCounts.set('page_frontend_hub', (pageLeadCounts.get('page_frontend_hub') || 0) + 1);
+      }
       if (lead.page_id) {
         pageLeadCounts.set(lead.page_id, (pageLeadCounts.get(lead.page_id) || 0) + 1);
       }
@@ -508,15 +555,19 @@ export default function AdminOverviewDashboard() {
     const rankedPages = relevantPages
       .map((p) => {
         const directCount = pageLeadCounts.get(p.id) || 0;
+        const isHub = p.id === 'page_frontend_hub';
         const stat = pageStats.find((s) => s.page_id === p.id);
         const leadsCount = isFiltered ? directCount : Math.max(stat?.leads ?? 0, directCount);
-        const pViews = isFiltered
+        const pViews = isHub
+          ? Math.max(p.views_count || 0, directCount)
+          : isFiltered
           ? Math.max(directCount, Math.round((stat?.views || 0) * (isSourceRestricted ? sourceRatio : 1)))
           : (stat?.views || leadsCount);
         const pConv = pViews > 0 ? Number(((leadsCount / pViews) * 100).toFixed(1)) : (leadsCount > 0 ? 100 : 0);
         return {
           ...p,
           leads_count: leadsCount,
+          views_count: pViews,
           conversion_percentage: pConv,
         };
       })

@@ -77,7 +77,44 @@ export default function TractionAnalyticsPage() {
           .order("total_leads", { ascending: false }),
       ]);
 
-      const hubPageBrief = { id: "page_frontend_hub", name: "Webpage (/)", slug: "" } as Page;
+      let hubViews = 0;
+      let hubClicks = 0;
+      try {
+        const tRes = await fetch("/api/v1/traffic");
+        if (tRes.ok) {
+          const tJson = await tRes.json();
+          if (tJson?.data) {
+            hubViews = Number(tJson.data.views || 0);
+            hubClicks = Number(tJson.data.form_clicks || 0);
+          }
+        }
+      } catch {}
+
+      let hubLeadsCount = 0;
+      try {
+        const lRes = await supabase
+          .from("leads")
+          .select("id, page_id, utm, source")
+          .or("page_id.eq.page_frontend_hub,page_id.eq.public_hub,page_id.is.null,source.eq.website_hub");
+        if (lRes.data) {
+          hubLeadsCount = lRes.data.filter((l: any) =>
+            l.page_id === "page_frontend_hub" ||
+            l.page_id === "public_hub" ||
+            !l.page_id ||
+            l.utm?.page_origin === "frontend_hub" ||
+            (l.source || "").toLowerCase() === "website_hub"
+          ).length;
+        }
+      } catch {}
+
+      const hubPageBrief = {
+        id: "page_frontend_hub",
+        name: "Web Page (/)",
+        slug: "",
+        views_count: hubViews,
+        leads_count: hubLeadsCount,
+        config: { form_clicks: hubClicks },
+      } as unknown as Page;
       const allPages = [hubPageBrief, ...((pagesRes.data as Page[]) || [])];
       setPages(allPages);
 
@@ -169,6 +206,24 @@ export default function TractionAnalyticsPage() {
       };
     }
 
+    // Special handling for Web Page: fall back directly to Web Page metrics if no daily_trend rows
+    if (selectedPageId === "page_frontend_hub" && filteredTrends.length === 0) {
+      const hub = pages.find((p) => p.id === "page_frontend_hub");
+      const views = hub?.views_count || 0;
+      const starts = (hub?.config as any)?.form_clicks || views;
+      const leads = (hub as any)?.leads_count || 0;
+      const conversionRate = views > 0 ? (leads / views) * 100 : (leads > 0 ? 100 : 0);
+      return {
+        views,
+        starts,
+        submits: leads,
+        downloads: 0,
+        leads,
+        completeLeads: leads,
+        conversionRate,
+      };
+    }
+
     // If daily_trends has no rows at all in DB, fall back to pageStats for all-time / 30d
     if (dailyTrends.length === 0) {
       const relevantStats =
@@ -178,15 +233,25 @@ export default function TractionAnalyticsPage() {
           ? pageStats.filter((s) => s.page_id === "page_frontend_hub" || s.page_id === "public_hub")
           : pageStats.filter((s) => s.page_id === selectedPageId);
 
-      const views = relevantStats.reduce((sum, s) => sum + Number(s.views || 0), 0);
-      const starts = relevantStats.reduce((sum, s) => sum + Number(s.starts || 0), 0);
+      let views = relevantStats.reduce((sum, s) => sum + Number(s.views || 0), 0);
+      let starts = relevantStats.reduce((sum, s) => sum + Number(s.starts || 0), 0);
       const submits = relevantStats.reduce((sum, s) => sum + Number(s.submits || 0), 0);
       const downloads = relevantStats.reduce((sum, s) => sum + Number(s.downloads || 0), 0);
-      const leads = relevantStats.reduce((sum, s) => sum + Number(s.leads || 0), 0);
+      let leads = relevantStats.reduce((sum, s) => sum + Number(s.leads || 0), 0);
       const completeLeads = relevantStats.reduce(
         (sum, s) => sum + Number(s.complete_leads || 0),
         0
       );
+
+      if (selectedPageId === "all") {
+        const hub = pages.find((p) => p.id === "page_frontend_hub");
+        if (hub) {
+          views += hub.views_count || 0;
+          starts += (hub.config as any)?.form_clicks || hub.views_count || 0;
+          leads += (hub as any)?.leads_count || 0;
+        }
+      }
+
       const conversionRate = views > 0 ? (leads / views) * 100 : 0;
 
       return {

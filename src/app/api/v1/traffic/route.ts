@@ -132,17 +132,18 @@ export async function POST(req: NextRequest) {
     const now = Date.now();
 
     if (type === 'view') {
-      // Only count 1 view per visitor every 30 minutes to ensure real-time accuracy
+      // Views on the Web Page are strictly triggered by the 3 consultation CTA buttons
+      // Deduplicate 1 view per visitor per 30 minutes
       const vid = String(visitor_id || 'anon');
       const lastSeen = seenVisitors.get(vid);
       if (!lastSeen || now - lastSeen > 30 * 60 * 1000) {
         seenVisitors.set(vid, now);
         current.views += 1;
+        current.form_clicks += 1;
         current.last_updated = new Date().toISOString();
         await persistToDatabase(current);
       }
     } else if (type === 'form_click') {
-      // Increment general form button clicks (Hero, Header, Bottom Banner CTAs)
       current.form_clicks += 1;
       current.last_updated = new Date().toISOString();
       await persistToDatabase(current);
@@ -161,6 +162,18 @@ export async function POST(req: NextRequest) {
           const { createServerSupabaseClient } = await import('@/lib/supabase/server');
           const serverClient = await createServerSupabaseClient();
           const { data: { user } } = await serverClient.auth.getUser();
+          if (user) {
+            isAuthorized = true;
+          }
+        } catch {}
+      }
+
+      if (!isAuthorized && authHeader) {
+        try {
+          const { createClient } = await import('@supabase/supabase-js');
+          const client = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+          const tokenStr = authHeader.replace(/^Bearer\s+/i, '').trim();
+          const { data: { user } } = await client.auth.getUser(tokenStr);
           if (user) {
             isAuthorized = true;
           }

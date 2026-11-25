@@ -153,16 +153,15 @@ export default function TerraTernPublicCalculatorsHub() {
           localStorage.removeItem("tt_hub_traffic");
         }
 
-        // Ping real-time server traffic endpoint for Web Page (strictly 1 view per visitor per 30 minutes)
-        fetch("/api/v1/traffic", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ type: "view", page: "web_page", visitor_id: vid }),
-        })
+        // Fetch read-only traffic numbers without registering a view (views only count when one of the 3 consultation CTA buttons is clicked)
+        fetch("/api/v1/traffic")
           .then((r) => r.json())
           .then((res) => {
             if (res?.data?.views !== undefined) {
               localStorage.setItem("tt_hub_traffic", String(res.data.views));
+            }
+            if (res?.data?.form_clicks !== undefined) {
+              localStorage.setItem("tt_hub_form_clicks", String(res.data.form_clicks));
             }
           })
           .catch(() => {});
@@ -365,20 +364,28 @@ export default function TerraTernPublicCalculatorsHub() {
             }),
           }).catch(() => {});
         } else {
-          // General Web Page CTA button click (Hero, Header, Bottom Banner): increment form_clicks for Web Page
-          const currentClicks = Number(localStorage.getItem("tt_hub_form_clicks") || 0);
-          localStorage.setItem("tt_hub_form_clicks", String(currentClicks + 1));
-
+          // Exactly the 3 Web Page CTA buttons (Header 'Contact TerraTern', Hero 'Get 1:1 Free counselling', Bottom Banner 'Free consultation'):
+          // Registers a Web Page view and form intent click strictly as planned
           fetch("/api/v1/traffic", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              type: "form_click",
+              type: "view",
               page: "web_page",
-              trigger: title || "general_counselling_btn",
+              trigger: title || "webpage_consultation_cta",
               visitor_id: vid,
             }),
-          }).catch(() => {});
+          })
+            .then((r) => r.json())
+            .then((res) => {
+              if (res?.data?.views !== undefined) {
+                localStorage.setItem("tt_hub_traffic", String(res.data.views));
+              }
+              if (res?.data?.form_clicks !== undefined) {
+                localStorage.setItem("tt_hub_form_clicks", String(res.data.form_clicks));
+              }
+            })
+            .catch(() => {});
         }
       } catch {}
     }

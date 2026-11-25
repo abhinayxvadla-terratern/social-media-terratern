@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
   const { corsHeaders } = validateOriginAndCors(req);
   const cacheHeaders = {
     ...corsHeaders,
-    'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300',
+    'Cache-Control': 'no-cache, no-store, max-age=0, must-revalidate',
   };
 
   try {

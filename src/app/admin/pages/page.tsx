@@ -655,11 +655,20 @@ export default function PagesManagementPage() {
           localStorage.setItem("tt_hub_manual_views", String(manualViews));
         }
         if (manualViews !== undefined) {
-          fetch("/api/v1/traffic", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ type: "set_views", views: Number(manualViews) }),
-          }).catch(() => {});
+          (async () => {
+            try {
+              const { data: { session } } = await supabase.auth.getSession();
+              await fetch("/api/v1/traffic", {
+                method: "POST",
+                credentials: "include",
+                headers: {
+                  "Content-Type": "application/json",
+                  ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+                },
+                body: JSON.stringify({ type: "set_views", views: Number(manualViews) }),
+              });
+            } catch {}
+          })();
         }
         setPages((prev) =>
           prev.map((p) =>
